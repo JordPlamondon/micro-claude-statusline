@@ -1,0 +1,15 @@
+[package]
+name = "statusline"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "statusline"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "z"     # size, not speed: the work is trivial, startup is everything
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
