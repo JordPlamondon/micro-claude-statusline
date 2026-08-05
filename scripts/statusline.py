@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Claude Code status line, Nord palette.
+"""Claude Code status line.
 
-Line 1: session name, model, project, branch/worktree, open PR, effort mode
-Line 2: context usage, 5h + 7d rate limits, session cost
+Reads the statusLine JSON payload on stdin, prints a two-row bar. Segments,
+widths and palette come from ~/.claude/statusline.json when it exists.
 
-Meters use a positional gradient (frost teal to aurora red) and eighth-width
-block characters, so the fill is accurate to 1/8 of a cell.
+Needs nothing but python3, which is why it is the default install. The Rust
+build in rust/ does the same job at about a fortieth of the CPU, which only
+matters if you run several Claude Code sessions at once.
+
+Output must stay byte-identical to the js and rust implementations. See
+scripts/parity.py.
 """
 
 import json
@@ -15,79 +19,200 @@ import sys
 import time
 
 ANSI_RE = re.compile(r"\033\[[0-9;]*m")
-
 RESET = "\033[0m"
-
-# Nord palette, https://www.nordtheme.com/docs/colors-and-palettes
-NORD = {
-    "polar2": (0x43, 0x4C, 0x5E),
-    "polar3": (0x4C, 0x56, 0x6A),
-    "snow4": (0xD8, 0xDE, 0xE9),
-    "snow6": (0xEC, 0xEF, 0xF4),
-    # Not a Nord token. Sits between polar3 and snow4, which have a large gap
-    # with nothing between them, for secondary text that still needs reading.
-    "muted": (0x7D, 0x86, 0x96),
-    "frost7": (0x8F, 0xBC, 0xBB),
-    "frost8": (0x88, 0xC0, 0xD0),
-    "frost9": (0x81, 0xA1, 0xC1),
-    "red": (0xBF, 0x61, 0x6A),
-    "orange": (0xD0, 0x87, 0x70),
-    "yellow": (0xEB, 0xCB, 0x8B),
-    "green": (0xA3, 0xBE, 0x8C),
-    "purple": (0xB4, 0x8E, 0xAD),
-}
-
-# Meter gradient: position along the bar maps to colour.
-GRADIENT = [
-    (0.00, NORD["frost8"]),
-    (0.40, NORD["green"]),
-    (0.70, NORD["yellow"]),
-    (1.00, NORD["red"]),
-]
 
 EIGHTHS = " ▏▎▍▌▋▊▉█"
 TRACK = "░"
-
-BAR_WIDTH = 16
-LIMIT_BAR_WIDTH = 6
-
-# Session name, truncated. AI-generated titles run long, and this leads the row.
-SESSION_NAME_WIDTH = 24
-
-# herdr writes live workspace state here, including the label shown in its tab
-# bar. Reading it costs ~0.1 ms, against ~16 ms to ask the herdr server.
-HERDR_SESSION = os.path.expanduser("~/.config/herdr/session.json")
-
 # U+2800 renders blank but is not whitespace, so it survives trimming.
 BLANK_ROW = "⠀"
 
-# Gap between the identity and usage rows. A terminal row is the smallest unit,
-# so there is no half-height gap; a faint rule reads smaller than empty space.
-#   "rule"  — dim dotted line, the tightest-looking gap
-#   "blank" — fully empty row, the largest gap
-#   "none"  — rows touch
-GAP_STYLE = "rule"
-
-# Rule character, and its width as a fraction of the widest row. 1.0 spans fully.
-GAP_RULE_CHAR = "┈"
-GAP_RULE_SCALE = 1.0
-
-# Blank rows printed below the bar, to keep it off the mode indicator. 0 disables.
-BOTTOM_SPACING = 1
-
-PR_STATE = {
-    "approved": ("green", "✓"),
-    "changes_requested": ("red", "✗"),
-    "pending": ("yellow", "●"),
-    "draft": ("polar3", "○"),
+# Every theme fills the same thirteen slots, so swapping one changes the whole
+# bar without touching render code. The meter gradient is derived from four of
+# them rather than defined separately, which keeps a new theme to one row.
+#
+#   separator  separators and the rule between rows, should recede
+#   dim        unfilled meter track, PR "draft", dimmest readable tone
+#   muted      secondary text: token counts, countdowns, effort
+#   bright     session cost
+#   brightest  session or workspace name
+#   accent_a   worktree marker
+#   accent_b   directory name, and the low end of the gradient
+#   accent_c   git branch
+#   model      model name
+#   good       PR approved, second gradient stop
+#   warn       PR pending, third gradient stop
+#   bad        PR changes requested, top of the gradient
+#   notice     fast mode
+THEMES = {
+    "nord": {
+        "separator": (0x43, 0x4C, 0x5E), "dim": (0x4C, 0x56, 0x6A),
+        "muted": (0x7D, 0x86, 0x96), "bright": (0xD8, 0xDE, 0xE9),
+        "brightest": (0xEC, 0xEF, 0xF4), "accent_a": (0x8F, 0xBC, 0xBB),
+        "accent_b": (0x88, 0xC0, 0xD0), "accent_c": (0x81, 0xA1, 0xC1),
+        "model": (0xB4, 0x8E, 0xAD), "good": (0xA3, 0xBE, 0x8C),
+        "warn": (0xEB, 0xCB, 0x8B), "bad": (0xBF, 0x61, 0x6A),
+        "notice": (0xD0, 0x87, 0x70),
+    },
+    "catppuccin": {
+        "separator": (0x45, 0x47, 0x5A), "dim": (0x58, 0x5B, 0x70),
+        "muted": (0x7F, 0x84, 0x9C), "bright": (0xBA, 0xC2, 0xDE),
+        "brightest": (0xCD, 0xD6, 0xF4), "accent_a": (0x94, 0xE2, 0xD5),
+        "accent_b": (0x89, 0xDC, 0xEB), "accent_c": (0x89, 0xB4, 0xFA),
+        "model": (0xCB, 0xA6, 0xF7), "good": (0xA6, 0xE3, 0xA1),
+        "warn": (0xF9, 0xE2, 0xAF), "bad": (0xF3, 0x8B, 0xA8),
+        "notice": (0xFA, 0xB3, 0x87),
+    },
+    "tokyo-night": {
+        "separator": (0x29, 0x2E, 0x42), "dim": (0x41, 0x48, 0x68),
+        "muted": (0x56, 0x5F, 0x89), "bright": (0xA9, 0xB1, 0xD6),
+        "brightest": (0xC0, 0xCA, 0xF5), "accent_a": (0x1A, 0xBC, 0x9C),
+        "accent_b": (0x7D, 0xCF, 0xFF), "accent_c": (0x7A, 0xA2, 0xF7),
+        "model": (0xBB, 0x9A, 0xF7), "good": (0x9E, 0xCE, 0x6A),
+        "warn": (0xE0, 0xAF, 0x68), "bad": (0xF7, 0x76, 0x8E),
+        "notice": (0xFF, 0x9E, 0x64),
+    },
+    "gruvbox": {
+        "separator": (0x3C, 0x38, 0x36), "dim": (0x50, 0x49, 0x45),
+        "muted": (0x92, 0x83, 0x74), "bright": (0xD5, 0xC4, 0xA1),
+        "brightest": (0xEB, 0xDB, 0xB2), "accent_a": (0x8E, 0xC0, 0x7C),
+        "accent_b": (0x83, 0xA5, 0x98), "accent_c": (0x45, 0x85, 0x88),
+        "model": (0xD3, 0x86, 0x9B), "good": (0xB8, 0xBB, 0x26),
+        "warn": (0xFA, 0xBD, 0x2F), "bad": (0xFB, 0x49, 0x34),
+        "notice": (0xFE, 0x80, 0x19),
+    },
+    "dracula": {
+        "separator": (0x44, 0x47, 0x5A), "dim": (0x62, 0x72, 0xA4),
+        "muted": (0x8A, 0x93, 0xB8), "bright": (0xE0, 0xE0, 0xDC),
+        "brightest": (0xF8, 0xF8, 0xF2), "accent_a": (0x8B, 0xE9, 0xFD),
+        "accent_b": (0x8B, 0xE9, 0xFD), "accent_c": (0xBD, 0x93, 0xF9),
+        "model": (0xFF, 0x79, 0xC6), "good": (0x50, 0xFA, 0x7B),
+        "warn": (0xF1, 0xFA, 0x8C), "bad": (0xFF, 0x55, 0x55),
+        "notice": (0xFF, 0xB8, 0x6C),
+    },
+    "one-dark": {
+        "separator": (0x3E, 0x44, 0x51), "dim": (0x4B, 0x52, 0x63),
+        "muted": (0x82, 0x89, 0x97), "bright": (0xAB, 0xB2, 0xBF),
+        "brightest": (0xDC, 0xDF, 0xE4), "accent_a": (0x56, 0xB6, 0xC2),
+        "accent_b": (0x61, 0xAF, 0xEF), "accent_c": (0x52, 0x8B, 0xFF),
+        "model": (0xC6, 0x78, 0xDD), "good": (0x98, 0xC3, 0x79),
+        "warn": (0xE5, 0xC0, 0x7B), "bad": (0xE0, 0x6C, 0x75),
+        "notice": (0xD1, 0x9A, 0x66),
+    },
 }
 
+DEFAULTS = {
+    "theme": "nord",
+    "line1": ["session", "model", "location", "pr", "modes"],
+    "line2": ["context", "limits", "cost"],
+    "bar_width": 16,
+    "limit_bar_width": 6,
+    "session_name_width": 24,
+    "gap": "rule",
+    "gap_char": "┈",
+    "gap_scale": 1.0,
+    "bottom_spacing": 1,
+    "truecolor": None,
+}
 
 CUBE = (0, 95, 135, 175, 215, 255)
 
-# True when the terminal advertises 24-bit colour. Everything else gets the
-# 256-colour approximation, which every terminal worth using supports.
-TRUECOLOR = os.environ.get("COLORTERM") in ("truecolor", "24bit")
+
+def parse_colour(v):
+    """"#88C0D0", "#8cd" or [136, 192, 208]."""
+    if isinstance(v, list) and len(v) == 3:
+        try:
+            return tuple(max(0, min(255, int(c))) for c in v)
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(v, str):
+        return None
+    s = v.strip().lstrip("#")
+    try:
+        if len(s) == 3:
+            return tuple(int(c * 2, 16) for c in s)
+        if len(s) == 6:
+            return tuple(int(s[i : i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        pass
+    return None
+
+
+def load_config():
+    """Absent or malformed means defaults, never an error: a status line that
+    disappears because of a stray comma is worse than one that ignores you."""
+    cfg = dict(DEFAULTS)
+    cfg["palette"] = dict(THEMES["nord"])
+
+    home = os.environ.get("HOME")
+    if not home:
+        return cfg
+    try:
+        with open(os.path.join(home, ".claude", "statusline.json")) as handle:
+            user = json.load(handle)
+    except (OSError, ValueError):
+        return cfg
+    if not isinstance(user, dict):
+        return cfg
+
+    name = str(user.get("theme", "")).strip().lower()
+    if name in THEMES:
+        cfg["theme"] = name
+        cfg["palette"] = dict(THEMES[name])
+
+    for slot, raw in (user.get("colors") or {}).items():
+        rgb = parse_colour(raw)
+        if rgb and slot in cfg["palette"]:
+            cfg["palette"][slot] = rgb
+
+    for key in ("line1", "line2"):
+        if isinstance(user.get(key), list):
+            cfg[key] = [str(s).strip().lower() for s in user[key] if isinstance(s, str)]
+
+    for key, floor in (
+        ("bar_width", 1),
+        ("limit_bar_width", 1),
+        ("session_name_width", 2),
+        ("bottom_spacing", 0),
+    ):
+        v = user.get(key)
+        if isinstance(v, int) and not isinstance(v, bool) and v >= 0:
+            cfg[key] = max(floor, v)
+
+    if str(user.get("gap", "")).strip().lower() in ("rule", "blank", "none"):
+        cfg["gap"] = user["gap"].strip().lower()
+    if isinstance(user.get("gap_char"), str) and user["gap_char"]:
+        cfg["gap_char"] = user["gap_char"]
+    scale = user.get("gap_scale")
+    if isinstance(scale, (int, float)) and not isinstance(scale, bool) and 0 < scale <= 1:
+        cfg["gap_scale"] = float(scale)
+    if isinstance(user.get("truecolor"), bool):
+        cfg["truecolor"] = user["truecolor"]
+
+    return cfg
+
+
+CFG = load_config()
+PALETTE = CFG["palette"]
+TRUECOLOR = (
+    CFG["truecolor"]
+    if CFG["truecolor"] is not None
+    else os.environ.get("COLORTERM") in ("truecolor", "24bit")
+)
+
+# Meter stops, derived so a new theme does not have to restate them.
+GRADIENT = [
+    (0.00, PALETTE["accent_b"]),
+    (0.40, PALETTE["good"]),
+    (0.70, PALETTE["warn"]),
+    (1.00, PALETTE["bad"]),
+]
+
+PR_STATE = {
+    "approved": ("good", "✓"),
+    "changes_requested": ("bad", "✗"),
+    "pending": ("warn", "●"),
+    "draft": ("dim", "○"),
+}
 
 
 def to_256(rgb):
@@ -111,13 +236,13 @@ def fg(rgb):
     return f"\033[38;5;{to_256(rgb)}m"
 
 
+def paint(text, slot):
+    return f"{fg(PALETTE[slot])}{text}{RESET}"
+
+
 def display_width(text):
     """Visible column count, ignoring ANSI colour escapes."""
     return len(ANSI_RE.sub("", text))
-
-
-def paint(text, key):
-    return f"{fg(NORD[key])}{text}{RESET}"
 
 
 def gradient_at(t):
@@ -143,7 +268,7 @@ def meter(pct, width):
         filled += 1
 
     if filled < width:
-        cells.append(f"{fg(NORD['polar3'])}{TRACK * (width - filled)}")
+        cells.append(f"{fg(PALETTE['dim'])}{TRACK * (width - filled)}")
 
     return "".join(cells) + RESET
 
@@ -153,7 +278,7 @@ def fmt_tokens(n):
         return f"{n / 1_000_000:.1f}M".replace(".0M", "M")
     if n >= 1_000:
         return f"{round(n / 1_000)}k"
-    return str(n)
+    return str(int(n))
 
 
 def fmt_duration(seconds):
@@ -161,7 +286,6 @@ def fmt_duration(seconds):
 
     Minutes matter on the 5h window, where you might wait it out. On the 7d
     window they are noise, and hours alone force a mental divide by 24.
-    Spaces between units because "121h25m" runs together at a glance.
     """
     if seconds <= 0:
         return "now"
@@ -176,12 +300,7 @@ def fmt_duration(seconds):
 
 
 def git_branch(cwd):
-    """Current branch, read straight from .git/HEAD.
-
-    Forking `git` dominated this script's runtime, and the status line re-renders
-    on every event in every open session. Two file reads cost a fraction of that,
-    and unlike a cache they can never go stale.
-    """
+    """Current branch, read straight from .git/HEAD rather than forking git."""
     path = os.path.abspath(cwd) if cwd else ""
     if not path or not os.path.isdir(path):
         return None
@@ -233,15 +352,14 @@ def location(data, cwd):
     branch = git_branch(cwd)
 
     if tree and tree == place:
-        # Directory is the worktree; mark it once instead of naming it twice.
-        segments = [paint(f"⑂ {place}", "frost8")]
+        segments = [paint(f"⑂ {place}", "accent_b")]
     else:
-        segments = [paint(place, "frost8")] if place else []
+        segments = [paint(place, "accent_b")] if place else []
         if tree:
-            segments.append(paint(f"⑂ {tree}", "frost7"))
+            segments.append(paint(f"⑂ {tree}", "accent_a"))
 
     if branch and branch != place and branch != tree:
-        segments.append(paint(f"⎇ {branch}", "frost9"))
+        segments.append(paint(f"⎇ {branch}", "accent_c"))
 
     return " ".join(segments)
 
@@ -253,13 +371,13 @@ def herdr_workspace_name():
     for unlabelled workspaces, which the location segment already shows.
     """
     workspace_id = os.environ.get("HERDR_WORKSPACE_ID")
-    if not workspace_id:
+    home = os.environ.get("HOME")
+    if not workspace_id or not home:
         return None
     try:
-        with open(HERDR_SESSION) as handle:
+        with open(os.path.join(home, ".config", "herdr", "session.json")) as handle:
             state = json.load(handle)
     except (OSError, ValueError):
-        # Absent, unreadable, or caught mid-write by herdr.
         return None
     for workspace in state.get("workspaces") or []:
         if workspace.get("id") == workspace_id:
@@ -268,111 +386,136 @@ def herdr_workspace_name():
 
 
 def session_label(data):
-    """Prefer the herdr workspace label, which is what the tab bar shows."""
+    """Prefer the herdr workspace label, which is what its tab bar shows."""
     name = herdr_workspace_name() or (data.get("session_name") or "").strip()
     if not name:
         return None
-    if len(name) > SESSION_NAME_WIDTH:
-        name = name[: SESSION_NAME_WIDTH - 1].rstrip() + "…"
+    width = CFG["session_name_width"]
+    if len(name) > width:
+        name = name[: width - 1].rstrip() + "…"
     return name
 
 
-def join(parts):
-    return f" {fg(NORD['polar2'])}│{RESET} ".join(p for p in parts if p)
+SEP = None  # built lazily, needs fg()
 
 
-def identity_line(data):
-    parts = []
-
-    # Leads the row: it is the only segment that differs between panes on the
-    # same project, so it is what the eye needs first when scanning tabs.
-    name = session_label(data)
-    if name:
-        parts.append(paint(name, "snow6"))
-
-    model = data.get("model", {}).get("display_name")
-    if model:
-        parts.append(paint(model, "purple"))
-
-    workspace = data.get("workspace") or {}
-    cwd = workspace.get("current_dir") or data.get("cwd") or ""
-
-    parts.append(location(data, cwd))
-
-    pr = data.get("pr") or {}
-    if pr.get("number"):
-        key, icon = PR_STATE.get(pr.get("review_state"), ("polar3", ""))
-        parts.append(paint(f"PR #{pr['number']}{' ' + icon if icon else ''}", key))
-
-    modes = []
-    effort = (data.get("effort") or {}).get("level")
-    if effort:
-        modes.append(paint(effort, "muted"))
-    if data.get("fast_mode"):
-        modes.append(paint("fast", "orange"))
-    if modes:
-        parts.append(" ".join(modes))
-
-    return join(parts)
+def sep():
+    global SEP
+    if SEP is None:
+        SEP = f" {fg(PALETTE['separator'])}│{RESET} "
+    return SEP
 
 
-def usage_line(data):
-    parts = []
+def segment(name, data):
+    """Renders one named segment, or None when it has no data to show."""
+    if name == "session":
+        label = session_label(data)
+        return paint(label, "brightest") if label else None
 
-    ctx = data.get("context_window") or {}
-    pct = ctx.get("used_percentage")
-    if pct is not None:
+    if name == "model":
+        model = (data.get("model") or {}).get("display_name")
+        return paint(model, "model") if model else None
+
+    if name == "location":
+        workspace = data.get("workspace") or {}
+        cwd = workspace.get("current_dir") or data.get("cwd") or ""
+        return location(data, cwd) or None
+
+    if name == "pr":
+        pr = data.get("pr") or {}
+        if not pr.get("number"):
+            return None
+        slot, icon = PR_STATE.get(pr.get("review_state"), ("dim", ""))
+        return paint(f"PR #{pr['number']}{' ' + icon if icon else ''}", slot)
+
+    if name == "modes":
+        modes = []
+        effort = (data.get("effort") or {}).get("level")
+        if effort:
+            modes.append(paint(effort, "muted"))
+        if data.get("fast_mode"):
+            modes.append(paint("fast", "notice"))
+        return " ".join(modes) if modes else None
+
+    if name == "context":
+        ctx = data.get("context_window") or {}
+        pct = ctx.get("used_percentage")
+        if pct is None:
+            return None
         pct = int(pct)
         tip = fg(gradient_at(pct / 100))
-        segment = f"{meter(pct, BAR_WIDTH)} {tip}{pct}%{RESET}"
+        out = f"{meter(pct, CFG['bar_width'])} {tip}{pct}%{RESET}"
         # used_percentage counts input tokens only (input + cache create + cache
         # read), so the token figure uses the same basis rather than adding output.
         used = ctx.get("total_input_tokens") or 0
         size = ctx.get("context_window_size")
         if used and size:
-            segment += " " + paint(f"{fmt_tokens(used)}/{fmt_tokens(size)}", "muted")
-        parts.append(segment)
+            out += " " + paint(f"{fmt_tokens(used)}/{fmt_tokens(size)}", "muted")
+        return out
 
-    limits = data.get("rate_limits") or {}
-    for key, label in (("five_hour", "5h"), ("seven_day", "7d")):
-        window = limits.get(key) or {}
-        limit_pct = window.get("used_percentage")
-        if limit_pct is None:
-            continue
-        limit_pct = int(limit_pct)
-        tip = fg(gradient_at(limit_pct / 100))
-        segment = (
-            f"{paint(label, 'muted')} {meter(limit_pct, LIMIT_BAR_WIDTH)} "
-            f"{tip}{limit_pct}%{RESET}"
-        )
-        resets_at = window.get("resets_at")
-        if resets_at:
-            segment += " " + paint(fmt_duration(resets_at - time.time()), "muted")
-        parts.append(segment)
+    if name in ("limits", "limit_5h", "limit_7d"):
+        wanted = {
+            "limit_5h": [("five_hour", "5h")],
+            "limit_7d": [("seven_day", "7d")],
+        }.get(name, [("five_hour", "5h"), ("seven_day", "7d")])
+        limits = data.get("rate_limits") or {}
+        out = []
+        for key, label in wanted:
+            window = limits.get(key) or {}
+            pct = window.get("used_percentage")
+            if pct is None:
+                continue
+            pct = int(pct)
+            tip = fg(gradient_at(pct / 100))
+            seg = (
+                f"{paint(label, 'muted')} {meter(pct, CFG['limit_bar_width'])} "
+                f"{tip}{pct}%{RESET}"
+            )
+            resets_at = window.get("resets_at")
+            if resets_at:
+                seg += " " + paint(fmt_duration(resets_at - time.time()), "muted")
+            out.append(seg)
+        return sep().join(out) if out else None
 
-    cost = (data.get("cost") or {}).get("total_cost_usd")
-    if cost:
-        parts.append(paint(f"${cost:.2f}", "snow4"))
+    if name == "cost":
+        cost = (data.get("cost") or {}).get("total_cost_usd")
+        return paint(f"${cost:.2f}", "bright") if cost else None
 
-    return join(parts)
+    # Unknown names are ignored, so a typo costs a segment not the bar.
+    return None
+
+
+def build_line(names, data):
+    parts = [segment(n, data) for n in names]
+    return sep().join(p for p in parts if p)
 
 
 def main():
+    if "--themes" in sys.argv[1:]:
+        print("\n".join(THEMES))
+        return
+
     try:
         data = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return
+    if not isinstance(data, dict):
+        return
 
-    lines = [line for line in (identity_line(data), usage_line(data)) if line]
+    lines = [
+        line
+        for line in (build_line(CFG["line1"], data), build_line(CFG["line2"], data))
+        if line
+    ]
     if not lines:
         return
 
-    if GAP_STYLE == "none":
+    if CFG["gap"] == "none":
         gap = []
-    elif GAP_STYLE == "rule":
+    elif CFG["gap"] == "rule":
         span = max(display_width(line) for line in lines)
-        width = max(1, round(span * GAP_RULE_SCALE))
-        gap = [f"{fg(NORD['polar2'])}{GAP_RULE_CHAR * width}{RESET}"]
+        width = max(1, round(span * CFG["gap_scale"]))
+        gap = [f"{fg(PALETTE['separator'])}{CFG['gap_char'] * width}{RESET}"]
     else:
         gap = [BLANK_ROW]
 
@@ -382,7 +525,7 @@ def main():
             rows += gap
         rows.append(line)
 
-    rows += [BLANK_ROW] * BOTTOM_SPACING
+    rows += [BLANK_ROW] * CFG["bottom_spacing"]
     print("\n".join(rows))
 
 

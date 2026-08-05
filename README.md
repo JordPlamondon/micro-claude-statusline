@@ -1,7 +1,7 @@
 # claude-statusline
 
-A status line for [Claude Code](https://code.claude.com/docs/en/statusline), in
-the Nord palette.
+A status line for [Claude Code](https://code.claude.com/docs/en/statusline). Six
+themes, configurable segments, Nord by default.
 
 ```
 my-feature │ Opus 5 (1M context) │ empirehomes.com ⎇ feature/promo-p3 │ PR #265 ✓ │ xhigh
@@ -37,12 +37,11 @@ It applies on your next interaction. No restart.
 
 ## Which version
 
-Three implementations, byte-identical output, verified by `scripts/parity.py`.
+Two implementations, byte-identical output, verified by `scripts/parity.py`.
 
 | | needs | CPU per render |
 |---|---|---|
 | `rust/` | cargo | 3 ms |
-| `scripts/statusline.js` | bun | 24 ms |
 | `scripts/statusline.py` | python3 only | 114 ms |
 
 **Python is fine for most people.** The status line re-runs on every event, so
@@ -56,11 +55,12 @@ about twenty seconds, which is also how you know what you are running.
 ## What it reads
 
 - stdin, the JSON payload Claude Code provides
+- `~/.claude/statusline.json`, your config, if you make one
 - `<repo>/.git/HEAD`, to show the branch without forking `git`
 - `~/.config/herdr/session.json`, only if `$HERDR_WORKSPACE_ID` is set
 
 It writes to stdout and nothing else. No network, no subprocesses, no
-credentials, no config files of its own.
+credentials.
 
 ## herdr is optional
 
@@ -77,25 +77,81 @@ Nothing to configure either way.
 approximation otherwise. The glyphs (`⎇ ⑂ ┈ ░ ▏▎▍▌▋▊▉█`) are standard Unicode,
 not Nerd Font, so no patched font is needed.
 
-## Customising
+## Config
 
-Constants at the top of each implementation, same names in all three:
+Optional. Put a `~/.claude/statusline.json` in place and it is picked up on the
+next render. Every key is optional, and anything invalid is ignored rather than
+fatal, so a stray comma costs you a setting and not the whole bar.
+
+```json
+{
+  "theme": "catppuccin",
+  "line1": ["session", "model", "location", "pr", "modes"],
+  "line2": ["context", "limits", "cost"],
+  "bar_width": 16,
+  "limit_bar_width": 6,
+  "session_name_width": 24,
+  "gap": "rule",
+  "gap_char": "┈",
+  "gap_scale": 1.0,
+  "bottom_spacing": 1
+}
+```
+
+The values above are the defaults, so an empty `{}` behaves the same as no file.
+
+**Segments** are named, and the arrays control both what appears and in what
+order. Drop one by leaving it out, move it to the other row, or reorder freely.
 
 | | |
 |---|---|
-| `BAR_WIDTH`, `LIMIT_BAR_WIDTH` | meter widths in columns |
-| `GRADIENT` | colour stops the meters interpolate between |
-| `GAP_STYLE` | `rule`, `blank` or `none` between the two rows |
-| `BOTTOM_SPACING` | blank rows below, to clear the mode indicator |
-| `SESSION_NAME_WIDTH` | truncation point for the leading label |
+| `session` | herdr workspace label, else Claude Code's session name |
+| `model` | model display name |
+| `location` | directory, worktree, git branch |
+| `pr` | open PR number and review state |
+| `modes` | reasoning effort, and `fast` when fast mode is on |
+| `context` | context meter, percentage, token counts |
+| `limits` | 5h and 7d rate limits together |
+| `limit_5h`, `limit_7d` | either one on its own |
+| `cost` | session cost |
 
-Rebuild after editing Rust:
+**Themes**: `nord`, `catppuccin`, `tokyo-night`, `gruvbox`, `dracula`,
+`one-dark`. List them with `--themes`.
+
+**Individual colours** override whichever theme is active. Accepts `"#88C0D0"`,
+`"#8cd"` or `[136, 192, 208]`.
+
+```json
+{ "theme": "gruvbox", "colors": { "brightest": "#ff00ff", "dim": [70, 70, 80] } }
+```
+
+| slot | used for |
+|---|---|
+| `separator` | the `│` dividers and the rule between rows |
+| `dim` | unfilled meter track, PR draft |
+| `muted` | token counts, countdowns, effort |
+| `bright` | session cost |
+| `brightest` | session name |
+| `accent_a` | worktree marker |
+| `accent_b` | directory, and the low end of the meter gradient |
+| `accent_c` | git branch |
+| `model` | model name |
+| `good`, `warn`, `bad` | PR states, and the upper gradient stops |
+| `notice` | fast mode |
+
+The meter gradient is derived from `accent_b`, `good`, `warn` and `bad`, so
+changing those changes the meters too.
+
+**`truecolor`** forces 24-bit on or off. Omit it to detect from `COLORTERM`.
+
+Rebuild after editing the Rust source:
 
 ```sh
 cd rust && cargo build --release
 ```
 
 The binary does not rebuild itself, so an edit does nothing until you run that.
+Config changes need no rebuild, since the file is read at each render.
 
 ## After changing output
 
@@ -104,7 +160,7 @@ python3 scripts/parity.py                    # 256-colour path
 COLORTERM=truecolor python3 scripts/parity.py  # 24-bit path
 ```
 
-165 cases: every whole percent through the meters, token and duration
+161 cases: every whole percent through the meters, token and duration
 boundaries, all PR states, worktrees, missing and malformed input. It compares
 raw bytes across whichever implementations are present.
 

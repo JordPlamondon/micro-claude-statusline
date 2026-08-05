@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Byte-for-byte parity check across the three implementations.
+"""Byte-for-byte parity check between the Python and Rust implementations.
 
-Feeds identical stdin and environment to each, then compares raw bytes. Run it
+Feeds identical stdin and environment to both, then compares raw bytes. Run it
 after any change that touches output. It is what catches the subtle ones, such
 as a currency rounding difference that only shows at $0.005.
 
@@ -11,7 +11,7 @@ Set COLORTERM=truecolor to exercise the 24-bit path, or unset it for the
 256-colour fallback. Both should report every case identical.
 
 Implementations that are not present are skipped rather than failing, so this
-works whether or not bun and the Rust binary are available.
+works whether or not the Rust binary has been built.
 """
 
 import json
@@ -22,7 +22,6 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = os.path.join(ROOT, "scripts", "statusline.py")
-JS = os.path.join(ROOT, "scripts", "statusline.js")
 RS = os.path.join(ROOT, "rust", "target", "release", "statusline")
 
 HOME = os.path.expanduser("~")
@@ -230,10 +229,6 @@ def run(cmd, raw, env):
 
 def main():
     impls = [("python", [PY])]
-    if subprocess.run(["which", "bun"], capture_output=True).returncode == 0:
-        impls.append(("js", ["bun", JS]))
-    else:
-        print("  skipping js, bun is not installed")
     if os.path.exists(RS):
         impls.append(("rust", [RS]))
     else:
