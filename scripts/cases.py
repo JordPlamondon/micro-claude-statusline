@@ -216,6 +216,9 @@ CONFIG_CASES = [
     ("preset compact, overridden", {"preset": "compact", "bar_width": 16, "gap": "rule"}),
     ("preset compact + theme", {"preset": "compact", "theme": "gruvbox"}),
     ("preset unknown", {"preset": "nope"}),
+    ("gap_char is an escape", {"gap_char": "\x1b"}),
+    ("colour is multi-byte", {"colors": {"dim": "\u20ac\u20ac"}}),
+    ("colour is two-byte pair", {"colors": {"dim": "\u00e9\u00e9\u00e9"}}),
 ]
 
 CONFIG_PAYLOAD = {
@@ -235,6 +238,32 @@ CONFIG_PAYLOAD = {
         "seven_day": {"used_percentage": 61, "resets_at": FIXED_NOW + 437400},
     },
 }
+
+# --- control characters -------------------------------------------------------
+# Everything user-derived that reaches stdout. A directory name containing an
+# ESC needs no compromise of Claude Code, just working somewhere hostile.
+ESC, BEL, DEL = "\x1b", "\x07", "\x7f"
+for name, payload in [
+    ("osc in session_name", {"session_name": f"{ESC}]0;PWNED{BEL}hi",
+                             "model": {"display_name": "M"},
+                             "workspace": {"current_dir": "/tmp"}}),
+    ("osc in model name", {"model": {"display_name": f"M{ESC}]0;Y{BEL}"},
+                           "workspace": {"current_dir": "/tmp"}}),
+    ("sgr in effort", {"model": {"display_name": "M"},
+                       "workspace": {"current_dir": "/tmp"},
+                       "effort": {"level": f"{ESC}[31mred"}}),
+    ("unterminated escape", {"session_name": f"a{ESC}[unterminated",
+                             "model": {"display_name": "M"},
+                             "workspace": {"current_dir": "/tmp"},
+                             "context_window": {"used_percentage": 50}}),
+    ("del and c1 bytes", {"session_name": f"a{DEL}b\u009fc",
+                          "model": {"display_name": "M"},
+                          "workspace": {"current_dir": "/tmp"}}),
+    ("newline in session_name", {"session_name": "one\ntwo",
+                                 "model": {"display_name": "M"},
+                                 "workspace": {"current_dir": "/tmp"}}),
+]:
+    case(name, payload)
 
 # --- malformed ---------------------------------------------------------------
 raw_case("raw: garbage", "xx")

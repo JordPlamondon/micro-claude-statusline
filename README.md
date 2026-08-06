@@ -85,6 +85,10 @@ eleven lines of bash and will serve you fine.
 Writes to stdout and nothing else. No network, no subprocesses, no credentials,
 no `unsafe`, and no third-party crates: `Cargo.lock` contains only this package.
 
+Everything it did not write is treated as hostile. Control characters are
+stripped from all rendered text, since a directory name containing an escape
+would otherwise reach your terminal as an escape.
+
 Some status lines fetch quota from an API and need a token in your keychain.
 This one does not, because the rate limits arrive in the payload already.
 

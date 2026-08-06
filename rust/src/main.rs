@@ -76,6 +76,29 @@ struct Ctx<'a> {
     truecolor: bool,
 }
 
+/// Strips control characters, so text we did not write cannot become escapes.
+///
+/// Directory names, session names, model names and .git/HEAD all reach stdout,
+/// and a directory containing an ESC is enough on its own: no compromise of
+/// Claude Code is needed, just working somewhere with a hostile name. Left
+/// unfiltered, a terminal would act on OSC sequences for window titles and, on
+/// terminals that allow it, clipboard writes.
+///
+/// Also a correctness fix. display_width skips from ESC to the next `m`, so an
+/// unterminated escape swallowed the rest of the row, mis-measuring the width
+/// and drawing the gap rule short.
+///
+/// C0 (0x00-0x1F), DEL (0x7F) and C1 (0x80-0x9F) all go. Newline included:
+/// rows are joined by this program, not by their contents.
+fn strip_controls(text: &str) -> String {
+    text.chars()
+        .filter(|c| {
+            let n = *c as u32;
+            !(n < 0x20 || n == 0x7F || (0x80..=0x9F).contains(&n))
+        })
+        .collect()
+}
+
 impl<'a> Ctx<'a> {
     fn fg(&self, c: Rgb) -> String {
         if self.truecolor {
@@ -85,8 +108,11 @@ impl<'a> Ctx<'a> {
         }
     }
 
+    /// The single choke point for anything derived from outside this program.
+    /// Meters build their own escapes from block characters, and the PR number
+    /// comes from a JSON number token, so neither needs filtering.
     fn paint(&self, text: &str, c: Rgb) -> String {
-        format!("{}{}{}", self.fg(c), text, RESET)
+        format!("{}{}{}", self.fg(c), strip_controls(text), RESET)
     }
 
     fn gradient_at(&self, t: f64) -> Rgb {
@@ -256,8 +282,14 @@ fn git_branch(cwd: &str) -> Option<String> {
     const PREFIX: &str = "ref: refs/heads/";
     let name = match head.strip_prefix(PREFIX) {
         Some(rest) => rest.to_string(),
-        // Detached HEAD, mid-rebase or on a tag: a short SHA beats nothing.
-        None => head.chars().take(7).collect(),
+        // Detached HEAD: a short object id beats showing nothing. Only if it
+        // actually looks like one, since a .git file can point anywhere and
+        // this would otherwise print the first seven characters of any file
+        // named HEAD that it was aimed at.
+        None if head.len() >= 7 && head.chars().all(|c| c.is_ascii_hexdigit()) => {
+            head.chars().take(7).collect()
+        }
+        None => return None,
     };
     if name.is_empty() {
         None

@@ -94,6 +94,14 @@ fn parse_colour(v: &Value) -> Option<Rgb> {
         return None;
     }
     let s = v.as_str()?.trim().trim_start_matches('#');
+    // len() counts bytes and the slicing below assumes they are characters.
+    // Without this, six bytes of multi-byte text ("€€") splits mid-character
+    // and aborts the process, which is exactly the "malformed means defaults"
+    // promise this file opens with. Note "ééé" happens to land on a valid
+    // boundary, so this survives casual testing.
+    if !s.is_ascii() {
+        return None;
+    }
     let expand = |c: char| u8::from_str_radix(&format!("{c}{c}"), 16).ok();
     match s.len() {
         3 => {
@@ -207,10 +215,15 @@ pub fn load() -> Config {
         }
     }
     if let Some(ch) = v.path("gap_char").and_then(Value::as_str) {
-        // One character. The rule repeats it to the width of the widest row, so
-        // a long string here multiplies into megabytes of output.
+        // One character, and not a control one. The rule is emitted without
+        // going through paint(), so this is the only place it can be filtered,
+        // and it repeats to the width of the row, so a long string here
+        // multiplies into megabytes of output.
         if let Some(first) = ch.chars().next() {
-            cfg.gap_char = first.to_string();
+            let n = first as u32;
+            if !(n < 0x20 || n == 0x7F || (0x80..=0x9F).contains(&n)) {
+                cfg.gap_char = first.to_string();
+            }
         }
     }
     if let Some(scale) = v.path("gap_scale").and_then(Value::as_f64) {
