@@ -44,6 +44,10 @@ and permissions alone. The binary is copied to `~/.claude/bin/statusline`, so
 
 To update, clone again and re-run `./install.sh`.
 
+`./install.sh --uninstall` reverses all of it: the binary, the symlink and the
+`statusLine` block. Your `statusline.json` is left alone in case you come back,
+and a status line pointing at something else is never touched.
+
 Prebuilt binaries are macOS only. There is one per architecture, the installer
 picks it, and verifies its SHA-256 before making it executable. On anything else
 it stops and tells you rather than installing a binary that cannot run.

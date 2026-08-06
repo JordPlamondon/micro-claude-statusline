@@ -1,9 +1,10 @@
 #!/bin/sh
 # Installs the Claude Code status line.
 #
-#   ./install.sh            download the prebuilt binary, else build from source
-#   ./install.sh binary     download the released universal binary (needs gh)
-#   ./install.sh rust       build from source (needs cargo)
+#   ./install.sh              download the prebuilt binary, else build from source
+#   ./install.sh binary       download the released binary for this arch (needs gh)
+#   ./install.sh rust         build from source (needs cargo)
+#   ./install.sh --uninstall  remove the binary, the symlink and the settings block
 #
 # Nothing here installs a toolchain for you. If cargo is missing the installer
 # says so rather than fetching Rust behind your back.
@@ -28,6 +29,67 @@ command -v python3 >/dev/null 2>&1 || {
   echo "python3 is required, at least to write the settings file." >&2
   exit 1
 }
+
+INSTALLED="${HOME}/.claude/bin/statusline"
+LINK="${HOME}/.local/bin/statusline"
+
+# Undoing an install has to be as easy as doing one. Without this, backing out
+# means knowing about three separate things, one of which is hand-editing JSON.
+if [ "$choice" = "--uninstall" ]; then
+  # Only unpick settings.json if statusLine still points at this program.
+  # Someone may have moved to a different status line since installing, and
+  # deleting their setting would be worse than leaving ours behind.
+  python3 - "$SETTINGS" "$INSTALLED" "$LINK" <<'PY'
+import json, os, sys
+
+path, installed, link = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(path) as fh:
+        settings = json.load(fh)
+except FileNotFoundError:
+    sys.exit(0)
+except ValueError:
+    # Bail before touching anything. Removing the binary while a settings file
+    # we cannot parse still points at it leaves a status line that just fails.
+    sys.exit(f"{path} is not valid JSON, so nothing was removed. "
+             "Fix or move it, then re-run.")
+
+block = settings.get("statusLine")
+if not isinstance(block, dict):
+    sys.exit(0)
+if block.get("command") not in (installed, link):
+    print(f"  kept       statusLine, it points at {block.get('command')}")
+    sys.exit(0)
+
+del settings["statusLine"]
+tmp = path + ".tmp"
+with open(tmp, "w") as fh:
+    json.dump(settings, fh, indent=2)
+    fh.write("\n")
+os.replace(tmp, path)
+print(f"  removed    statusLine from {path}")
+PY
+
+  # A file someone put there deliberately is not the installer's to delete, so
+  # this goes only if it is a symlink and it is ours.
+  if [ -L "$LINK" ] && [ "$(readlink "$LINK")" = "$INSTALLED" ]; then
+    rm -f "$LINK"
+    echo "  removed    $LINK"
+  fi
+  if [ -f "$INSTALLED" ]; then
+    rm -f "$INSTALLED"
+    echo "  removed    $INSTALLED"
+  fi
+  # Only if we emptied it. Claude Code may keep other things here.
+  rmdir "${HOME}/.claude/bin" 2>/dev/null || true
+
+  echo
+  echo "Uninstalled. The bar goes on your next interaction, no restart needed."
+  echo
+  echo "Your config was left in place, since you may want it if you reinstall:"
+  echo "  rm ${HOME}/.claude/statusline.json"
+  exit 0
+fi
 
 have_release() {
   command -v gh >/dev/null 2>&1 || return 1
@@ -55,7 +117,7 @@ case "$choice" in
     fi
     ;;
   binary|rust) ;;
-  *) echo "usage: $0 [binary|rust]" >&2; exit 1 ;;
+  *) echo "usage: $0 [binary|rust|--uninstall]" >&2; exit 1 ;;
 esac
 
 if [ "$choice" = binary ]; then
@@ -119,7 +181,6 @@ fi
 # Copy out of the checkout before pointing anything at it. Otherwise deleting
 # the clone later leaves settings.json aimed at a path that no longer exists,
 # and the status line just stops with no explanation.
-INSTALLED="${HOME}/.claude/bin/statusline"
 mkdir -p "${HOME}/.claude/bin"
 cp "$BUILT" "$INSTALLED"
 chmod +x "$INSTALLED"
@@ -133,8 +194,8 @@ echo "  binary     -> $COMMAND"
 case ":${PATH}:" in
   *":${HOME}/.local/bin:"*)
     mkdir -p "${HOME}/.local/bin"
-    ln -sf "$COMMAND" "${HOME}/.local/bin/statusline"
-    echo "  statusline -> ${HOME}/.local/bin/statusline"
+    ln -sf "$COMMAND" "$LINK"
+    echo "  statusline -> $LINK"
     ;;
   *)
     echo "  ~/.local/bin is not on your PATH, so the statusline command is not linked."
@@ -174,7 +235,7 @@ echo
 echo "Done. It appears on your next interaction, no restart needed."
 echo
 echo "Have a look at the themes:"
-if [ -L "${HOME}/.local/bin/statusline" ]; then
+if [ -L "$LINK" ]; then
   echo "  statusline --preview        all six"
   echo "  statusline --init           write a config you can edit"
 else
