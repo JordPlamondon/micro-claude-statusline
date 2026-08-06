@@ -28,11 +28,11 @@ pub const DEFAULT_CONFIG: &str = r#"{
   "// preset": "compact puts everything on one row. Omit for the default two.",
   "// note on presets": "a starting point only, keys below still override it",
 
-  "// theme": "nord | catppuccin | tokyo-night | gruvbox | dracula | one-dark",
+  "// theme": "{{THEMES}}",
   "theme": "nord",
 
   "// line1": "identity row. Reorder freely, or move entries to line2.",
-  "// segments": "session, model, location, pr, modes, context, limits, limit_5h, limit_7d, cost",
+  "// segments": "{{SEGMENTS}}",
   "line1": ["session", "model", "location", "pr", "modes"],
 
   "// line2": "usage row. Drop a segment by leaving it out.",
@@ -93,7 +93,18 @@ pub fn init(force: bool) -> i32 {
             return 1;
         }
     }
-    match std::fs::write(&path, DEFAULT_CONFIG) {
+    // The lists of themes and segments are filled in from the code that
+    // defines them, so a new theme or segment appears here without anyone
+    // remembering to update a second copy. Substitution rather than format!,
+    // because the template contains a literal "colors": {}.
+    let body = DEFAULT_CONFIG
+        .replace("{{THEMES}}", &theme::names().collect::<Vec<_>>().join(" | "))
+        .replace(
+            "{{SEGMENTS}}",
+            &crate::segment_names().collect::<Vec<_>>().join(", "),
+        );
+
+    match std::fs::write(&path, &body) {
         Ok(_) => {
             println!("wrote {path}");
             println!("every value there is already the default, so edit freely");

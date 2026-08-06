@@ -430,130 +430,174 @@ fn now_secs() -> f64 {
         .unwrap_or(0.0)
 }
 
+fn seg_session(ctx: &Ctx, data: &Value) -> Option<String> {
+    let cfg = ctx.cfg;
+    session_label(data, cfg.session_name_width, cfg.use_herdr)
+        .map(|n| ctx.paint(&n, cfg.palette.brightest))
+}
+
+fn seg_model(ctx: &Ctx, data: &Value) -> Option<String> {
+    data.path("model.display_name")
+        .and_then(Value::as_str)
+        .map(|m| ctx.paint(m, ctx.cfg.palette.model))
+}
+
+fn seg_location(ctx: &Ctx, data: &Value) -> Option<String> {
+    let cwd = data
+        .path("workspace.current_dir")
+        .and_then(Value::as_str)
+        .or_else(|| data.path("cwd").and_then(Value::as_str))
+        .unwrap_or("");
+    let s = location(ctx, data, cwd);
+    (!s.is_empty()).then_some(s)
+}
+
+fn seg_pr(ctx: &Ctx, data: &Value) -> Option<String> {
+    let num = data.path("pr.number")?;
+    if !num.is_truthy() {
+        return None;
+    }
+    let (colour, icon) = pr_state(
+        data.path("pr.review_state").and_then(Value::as_str),
+        &ctx.cfg.palette,
+    );
+    let raw = num.as_raw().unwrap_or("");
+    let text = if icon.is_empty() {
+        format!("PR #{raw}")
+    } else {
+        format!("PR #{raw} {icon}")
+    };
+    Some(ctx.paint(&text, colour))
+}
+
+fn seg_modes(ctx: &Ctx, data: &Value) -> Option<String> {
+    let p = &ctx.cfg.palette;
+    let mut modes: Vec<String> = Vec::new();
+    if let Some(effort) = data.path("effort.level").and_then(Value::as_str) {
+        modes.push(ctx.paint(effort, p.muted));
+    }
+    if data.path("fast_mode").map(Value::is_truthy).unwrap_or(false) {
+        modes.push(ctx.paint("fast", p.notice));
+    }
+    (!modes.is_empty()).then(|| modes.join(" "))
+}
+
+fn seg_context(ctx: &Ctx, data: &Value) -> Option<String> {
+    let cfg = ctx.cfg;
+    let pct = data
+        .path("context_window.used_percentage")
+        .and_then(Value::as_f64)?
+        .trunc() as i64;
+    let tip = ctx.fg(ctx.gradient_at(pct as f64 / 100.0));
+    let mut out = format!("{} {}{}%{}", ctx.meter(pct, cfg.bar_width), tip, pct, RESET);
+    // used_percentage counts input tokens only (input + cache create + cache
+    // read), so the token figure uses the same basis.
+    let used = data
+        .path("context_window.total_input_tokens")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    let size = data
+        .path("context_window.context_window_size")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    if used != 0.0 && size != 0.0 {
+        out.push(' ');
+        out.push_str(&ctx.paint(
+            &format!("{}/{}", fmt_tokens(used), fmt_tokens(size)),
+            cfg.palette.muted,
+        ));
+    }
+    Some(out)
+}
+
+/// One rate-limit window: label, meter, percentage and countdown to reset.
+fn limit_window(ctx: &Ctx, data: &Value, key: &str, label: &str) -> Option<String> {
+    let p = &ctx.cfg.palette;
+    let window = data.path("rate_limits")?.get(key)?;
+    let pct = window
+        .get("used_percentage")
+        .and_then(Value::as_f64)?
+        .trunc() as i64;
+    let tip = ctx.fg(ctx.gradient_at(pct as f64 / 100.0));
+    let mut out = format!(
+        "{} {} {}{}%{}",
+        ctx.paint(label, p.muted),
+        ctx.meter(pct, ctx.cfg.limit_bar_width),
+        tip,
+        pct,
+        RESET
+    );
+    if let Some(resets) = window.get("resets_at").and_then(Value::as_f64) {
+        if resets != 0.0 {
+            out.push(' ');
+            out.push_str(&ctx.paint(&fmt_duration(resets - now_secs()), p.muted));
+        }
+    }
+    Some(out)
+}
+
+const FIVE_HOUR: (&str, &str) = ("five_hour", "5h");
+const SEVEN_DAY: (&str, &str) = ("seven_day", "7d");
+
+fn limits(ctx: &Ctx, data: &Value, wanted: &[(&str, &str)]) -> Option<String> {
+    let parts: Vec<String> = wanted
+        .iter()
+        .filter_map(|(key, label)| limit_window(ctx, data, key, label))
+        .collect();
+    let sep = format!(" {}│{} ", ctx.fg(ctx.cfg.palette.separator), RESET);
+    (!parts.is_empty()).then(|| parts.join(&sep))
+}
+
+/// Both windows in one segment, matching how they read together.
+fn seg_limits(ctx: &Ctx, data: &Value) -> Option<String> {
+    limits(ctx, data, &[FIVE_HOUR, SEVEN_DAY])
+}
+
+fn seg_limit_5h(ctx: &Ctx, data: &Value) -> Option<String> {
+    limits(ctx, data, &[FIVE_HOUR])
+}
+
+fn seg_limit_7d(ctx: &Ctx, data: &Value) -> Option<String> {
+    limits(ctx, data, &[SEVEN_DAY])
+}
+
+fn seg_cost(ctx: &Ctx, data: &Value) -> Option<String> {
+    let cost = data.path("cost.total_cost_usd").and_then(Value::as_f64)?;
+    (cost != 0.0).then(|| {
+        ctx.paint(
+            &format!("${}", format_fixed(cost, 2)),
+            ctx.cfg.palette.bright,
+        )
+    })
+}
+
+/// Every segment a config file can name, bound to what renders it.
+///
+/// A table rather than one long match: each renderer is independently
+/// readable, and the names live in one place rather than scattered through
+/// arms, so `--init` can list them without a second copy going stale.
+const SEGMENTS: [(&str, fn(&Ctx, &Value) -> Option<String>); 10] = [
+    ("session", seg_session),
+    ("model", seg_model),
+    ("location", seg_location),
+    ("pr", seg_pr),
+    ("modes", seg_modes),
+    ("context", seg_context),
+    ("limits", seg_limits),
+    ("limit_5h", seg_limit_5h),
+    ("limit_7d", seg_limit_7d),
+    ("cost", seg_cost),
+];
+
+pub fn segment_names() -> impl Iterator<Item = &'static str> {
+    SEGMENTS.iter().map(|(name, _)| *name)
+}
+
 /// Renders one named segment, or None when it has no data to show.
 fn segment(name: &str, ctx: &Ctx, data: &Value) -> Option<String> {
-    let cfg = ctx.cfg;
-    let p = &cfg.palette;
-
-    match name {
-        "session" => session_label(data, cfg.session_name_width, cfg.use_herdr)
-            .map(|n| ctx.paint(&n, p.brightest)),
-
-        "model" => data
-            .path("model.display_name")
-            .and_then(Value::as_str)
-            .map(|m| ctx.paint(m, p.model)),
-
-        "location" => {
-            let cwd = data
-                .path("workspace.current_dir")
-                .and_then(Value::as_str)
-                .or_else(|| data.path("cwd").and_then(Value::as_str))
-                .unwrap_or("");
-            let s = location(ctx, data, cwd);
-            (!s.is_empty()).then_some(s)
-        }
-
-        "pr" => {
-            let num = data.path("pr.number")?;
-            if !num.is_truthy() {
-                return None;
-            }
-            let (colour, icon) = pr_state(data.path("pr.review_state").and_then(Value::as_str), p);
-            let raw = num.as_raw().unwrap_or("");
-            let text = if icon.is_empty() {
-                format!("PR #{}", raw)
-            } else {
-                format!("PR #{} {}", raw, icon)
-            };
-            Some(ctx.paint(&text, colour))
-        }
-
-        "modes" => {
-            let mut modes: Vec<String> = Vec::new();
-            if let Some(effort) = data.path("effort.level").and_then(Value::as_str) {
-                modes.push(ctx.paint(effort, p.muted));
-            }
-            if data.path("fast_mode").map(Value::is_truthy).unwrap_or(false) {
-                modes.push(ctx.paint("fast", p.notice));
-            }
-            (!modes.is_empty()).then(|| modes.join(" "))
-        }
-
-        "context" => {
-            let pct_val = data
-                .path("context_window.used_percentage")
-                .and_then(Value::as_f64)?;
-            let pct = pct_val.trunc() as i64;
-            let tip = ctx.fg(ctx.gradient_at(pct as f64 / 100.0));
-            let mut out = format!("{} {}{}%{}", ctx.meter(pct, cfg.bar_width), tip, pct, RESET);
-            // used_percentage counts input tokens only (input + cache create +
-            // cache read), so the token figure uses the same basis.
-            let used = data
-                .path("context_window.total_input_tokens")
-                .and_then(Value::as_f64)
-                .unwrap_or(0.0);
-            let size = data
-                .path("context_window.context_window_size")
-                .and_then(Value::as_f64)
-                .unwrap_or(0.0);
-            if used != 0.0 && size != 0.0 {
-                out.push(' ');
-                out.push_str(&ctx.paint(
-                    &format!("{}/{}", fmt_tokens(used), fmt_tokens(size)),
-                    p.muted,
-                ));
-            }
-            Some(out)
-        }
-
-        // Both windows in one segment, matching how they read together.
-        "limits" | "limit_5h" | "limit_7d" => {
-            let wanted: &[(&str, &str)] = match name {
-                "limit_5h" => &[("five_hour", "5h")],
-                "limit_7d" => &[("seven_day", "7d")],
-                _ => &[("five_hour", "5h"), ("seven_day", "7d")],
-            };
-            let mut out: Vec<String> = Vec::new();
-            for (key, label) in wanted {
-                let Some(pct_val) = data
-                    .path(&format!("rate_limits.{}.used_percentage", key))
-                    .and_then(Value::as_f64)
-                else {
-                    continue;
-                };
-                let pct = pct_val.trunc() as i64;
-                let tip = ctx.fg(ctx.gradient_at(pct as f64 / 100.0));
-                let mut seg = format!(
-                    "{} {} {}{}%{}",
-                    ctx.paint(label, p.muted),
-                    ctx.meter(pct, cfg.limit_bar_width),
-                    tip,
-                    pct,
-                    RESET
-                );
-                if let Some(resets) = data
-                    .path(&format!("rate_limits.{}.resets_at", key))
-                    .and_then(Value::as_f64)
-                {
-                    if resets != 0.0 {
-                        seg.push(' ');
-                        seg.push_str(&ctx.paint(&fmt_duration(resets - now_secs()), p.muted));
-                    }
-                }
-                out.push(seg);
-            }
-            (!out.is_empty()).then(|| out.join(&format!(" {}│{} ", ctx.fg(p.separator), RESET)))
-        }
-
-        "cost" => {
-            let cost = data.path("cost.total_cost_usd").and_then(Value::as_f64)?;
-            (cost != 0.0).then(|| ctx.paint(&format!("${}", format_fixed(cost, 2)), p.bright))
-        }
-
-        // Unknown names are ignored, so a typo costs a segment not the bar.
-        _ => None,
-    }
+    // Unknown names are ignored, so a typo costs a segment and not the bar.
+    let (_, render) = SEGMENTS.iter().find(|(n, _)| *n == name)?;
+    render(ctx, data)
 }
 
 /// Terminal width, from $COLUMNS.
