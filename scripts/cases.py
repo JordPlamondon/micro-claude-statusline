@@ -3,7 +3,7 @@
 
 Cases must be deterministic. Anything time-based is expressed as an offset from
 a fixed epoch rather than from now, so the same input always produces the same
-bytes. FIXED_NOW is passed to the binary as $STATUSLINE_NOW.
+bytes. FIXED_NOW is passed to the binary as $STATUSLINE_TEST_PINNED_CLOCK.
 """
 
 import json

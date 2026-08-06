@@ -207,7 +207,7 @@ percent through the meters, token and duration boundaries, all PR states,
 worktrees, every theme, config permutations, missing and malformed input, under
 both 24-bit and 256-colour.
 
-Time is pinned with `$STATUSLINE_NOW` and `$HOME` is redirected to a scratch
+Time is pinned with `$STATUSLINE_TEST_PINNED_CLOCK` and `$HOME` is redirected to a scratch
 directory, so the same input produces the same bytes on any machine at any time
 of day.
 
@@ -245,5 +245,6 @@ The open-PR badge in Claude Code's footer shows the same PR as the `pr` segment
 here. This adds the review state icon; if you would rather not have it twice,
 drop `pr` from `line1`.
 
-`$STATUSLINE_NOW` pins the clock. It exists for the tests, and setting it in
-normal use will freeze the rate-limit countdowns.
+`$STATUSLINE_TEST_PINNED_CLOCK` exists so the golden files can check exact
+duration boundaries against a fixed instant. Setting it outside the tests
+freezes the rate-limit countdowns, which is why the name is that unwieldy.

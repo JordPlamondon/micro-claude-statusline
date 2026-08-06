@@ -10,7 +10,7 @@ catches a change even when it is the only implementation, and it pins behaviour
 that has already been reviewed rather than blessing whatever the code does now.
 
 Both colour depths are covered, since the 256-colour fallback has its own
-rounding. Time is pinned via $STATUSLINE_NOW so countdowns are deterministic.
+rounding. Time is pinned via $STATUSLINE_TEST_PINNED_CLOCK so countdowns are deterministic.
 """
 
 import json
@@ -56,7 +56,7 @@ def run(binary, stdin, env, home):
     # A stable environment, so the output cannot depend on the machine.
     full.pop("HERDR_WORKSPACE_ID", None)
     full["HOME"] = home
-    full["STATUSLINE_NOW"] = str(FIXED_NOW)
+    full["STATUSLINE_TEST_PINNED_CLOCK"] = str(FIXED_NOW)
     full.update(env)
     cmd = binary if isinstance(binary, list) else [binary]
     return subprocess.run(
