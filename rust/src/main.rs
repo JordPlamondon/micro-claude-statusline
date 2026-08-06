@@ -5,10 +5,10 @@
 //!
 //! The status line re-runs on every event in every open session, so with several
 //! agents working at once the per-render cost multiplies. Interpreter startup was
-//! the whole cost of earlier versions: python ~114 ms, bun ~24 ms, this ~3 ms.
+//! the whole cost of earlier versions: python ~114 ms, bun ~24 ms, this ~2.3 ms.
 //!
-//! Output must stay byte-identical to the js and python implementations. See
-//! scripts/parity.py.
+//! Output is pinned by tests/golden.txt. Run scripts/golden.py after any change
+//! that touches what gets printed.
 
 mod cli;
 mod config;

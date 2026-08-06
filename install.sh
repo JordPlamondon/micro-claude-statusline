@@ -65,15 +65,25 @@ if [ "$choice" = binary ]; then
   }
   DEST="$ROOT/bin"
   mkdir -p "$DEST"
+  rm -f "$DEST/statusline" "$DEST/statusline.sha256"
   echo "Downloading the prebuilt universal binary."
   gh release download --repo "$REPO" --pattern statusline --dir "$DEST" --clobber
-  gh release download --repo "$REPO" --pattern statusline.sha256 --dir "$DEST" --clobber 2>/dev/null || true
-  if [ -f "$DEST/statusline.sha256" ]; then
-    ( cd "$DEST" && shasum -a 256 -c statusline.sha256 ) || {
-      echo "Checksum did not match. Refusing to install." >&2
-      exit 1
-    }
+
+  # Verification is mandatory. Previously a missing checksum was swallowed and
+  # the check silently skipped, which is the failure mode you least want: an
+  # unverified binary installed with no warning.
+  if ! gh release download --repo "$REPO" --pattern statusline.sha256 --dir "$DEST" --clobber; then
+    echo "No statusline.sha256 in the release, so the download cannot be verified." >&2
+    echo "Build from source instead: $0 rust" >&2
+    exit 1
   fi
+  ( cd "$DEST" && shasum -a 256 -c statusline.sha256 ) || {
+    echo "Checksum did not match. Refusing to install." >&2
+    rm -f "$DEST/statusline"
+    exit 1
+  }
+
+  # Only executable once it has been verified.
   chmod +x "$DEST/statusline"
   BUILT="$DEST/statusline"
 else

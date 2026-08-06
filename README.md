@@ -51,9 +51,15 @@ Same binary either way. `install.sh` downloads it if it can, builds it if not.
 | `./install.sh binary` | `gh`, and access to this repo |
 | `./install.sh rust` | cargo, about 1.5 GB of toolchain |
 
-The release is a universal binary, so it runs on Apple Silicon and Intel, and it
-ships with a SHA-256 that the installer verifies before putting it in place.
+The release is a universal binary, so it runs on Apple Silicon and Intel.
 macOS only. On Linux, build from source.
+
+The installer verifies a SHA-256 before making the binary executable, and
+refuses to continue if the checksum is missing or does not match. Worth being
+clear about what that covers: the checksum ships in the same release as the
+binary, so it protects against a corrupted or truncated download, not against a
+compromised release or GitHub account. The real assurance is that the source is
+here to read and `./install.sh rust` reproduces the binary locally.
 
 ## Speed
 
@@ -86,8 +92,13 @@ eleven lines of bash and will serve you fine.
 - `~/.config/herdr/session.json`, only if `$HERDR_WORKSPACE_ID` is set
 
 It writes to stdout and nothing else. No network, no subprocesses, no
-credentials. Roughly 900 lines of dependency-free Rust, so reading it before you
-run it is realistic.
+credentials, no `unsafe`, and no third-party crates: `Cargo.lock` contains only
+this package. Roughly 900 lines, so reading it before you run it is realistic.
+
+Input is treated as untrusted. JSON nesting is capped at 64 levels so a
+pathological payload cannot overflow the stack, and every config dimension is
+clamped, so a mistyped `bar_width` cannot make the renderer allocate without
+limit. Malformed input of any kind prints nothing rather than failing loudly.
 
 ## herdr is optional
 

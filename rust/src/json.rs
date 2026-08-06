@@ -88,15 +88,22 @@ impl Value {
     }
 }
 
+/// Nesting cap for the recursive descent below. The real payload nests about
+/// three deep and the config barely two, so this is far above anything valid,
+/// and without it a pathological input overflows the stack and aborts.
+const MAX_DEPTH: usize = 64;
+
 struct Parser<'a> {
     bytes: &'a [u8],
     pos: usize,
+    depth: usize,
 }
 
 pub fn parse(input: &str) -> Option<Value> {
     let mut p = Parser {
         bytes: input.as_bytes(),
         pos: 0,
+        depth: 0,
     };
     p.ws();
     let v = p.value()?;
@@ -141,6 +148,16 @@ impl<'a> Parser<'a> {
     }
 
     fn object(&mut self) -> Option<Value> {
+        if self.depth >= MAX_DEPTH {
+            return None;
+        }
+        self.depth += 1;
+        let out = self.object_inner();
+        self.depth -= 1;
+        out
+    }
+
+    fn object_inner(&mut self) -> Option<Value> {
         self.pos += 1; // {
         let mut map = HashMap::new();
         self.ws();
@@ -172,6 +189,16 @@ impl<'a> Parser<'a> {
     }
 
     fn array(&mut self) -> Option<Value> {
+        if self.depth >= MAX_DEPTH {
+            return None;
+        }
+        self.depth += 1;
+        let out = self.array_inner();
+        self.depth -= 1;
+        out
+    }
+
+    fn array_inner(&mut self) -> Option<Value> {
         self.pos += 1; // [
         let mut items = Vec::new();
         self.ws();

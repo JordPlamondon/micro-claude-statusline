@@ -50,9 +50,16 @@ impl Default for Config {
     }
 }
 
-fn usize_at(v: &Value, key: &str, current: usize) -> usize {
+/// Reads a whole number within [floor, ceiling], ignoring anything outside.
+///
+/// The ceiling matters: without one, `"bar_width": 100000000` is accepted and
+/// the renderer then allocates until the process stalls. Nothing here should be
+/// larger than a terminal is wide, so the caps are generous but finite.
+fn usize_at(v: &Value, key: &str, current: usize, floor: usize, ceiling: usize) -> usize {
     match v.path(key).and_then(Value::as_f64) {
-        Some(n) if n >= 0.0 => n as usize,
+        Some(n) if n.is_finite() && n >= 0.0 && n <= ceiling as f64 => {
+            (n as usize).clamp(floor, ceiling)
+        }
         _ => current,
     }
 }
@@ -145,10 +152,10 @@ pub fn load() -> Config {
 
     cfg.line1 = segments_at(&v, "line1", cfg.line1);
     cfg.line2 = segments_at(&v, "line2", cfg.line2);
-    cfg.bar_width = usize_at(&v, "bar_width", cfg.bar_width).max(1);
-    cfg.limit_bar_width = usize_at(&v, "limit_bar_width", cfg.limit_bar_width).max(1);
-    cfg.session_name_width = usize_at(&v, "session_name_width", cfg.session_name_width).max(2);
-    cfg.bottom_spacing = usize_at(&v, "bottom_spacing", cfg.bottom_spacing);
+    cfg.bar_width = usize_at(&v, "bar_width", cfg.bar_width, 1, 500);
+    cfg.limit_bar_width = usize_at(&v, "limit_bar_width", cfg.limit_bar_width, 1, 500);
+    cfg.session_name_width = usize_at(&v, "session_name_width", cfg.session_name_width, 2, 500);
+    cfg.bottom_spacing = usize_at(&v, "bottom_spacing", cfg.bottom_spacing, 0, 20);
 
     if let Some(gap) = v.path("gap").and_then(Value::as_str) {
         let gap = gap.trim().to_lowercase();
@@ -157,8 +164,10 @@ pub fn load() -> Config {
         }
     }
     if let Some(ch) = v.path("gap_char").and_then(Value::as_str) {
-        if !ch.is_empty() {
-            cfg.gap_char = ch.to_string();
+        // One character. The rule repeats it to the width of the widest row, so
+        // a long string here multiplies into megabytes of output.
+        if let Some(first) = ch.chars().next() {
+            cfg.gap_char = first.to_string();
         }
     }
     if let Some(scale) = v.path("gap_scale").and_then(Value::as_f64) {
