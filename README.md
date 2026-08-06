@@ -27,30 +27,51 @@ cd claude-statusline
 ./install.sh
 ```
 
-That builds the Rust binary if you have `cargo`, and falls back to Python if you
-do not. Force either with `./install.sh python` or `./install.sh rust`.
-
-The installer merges into `~/.claude/settings.json`. Your hooks, model and
-permissions are left alone.
-
 It applies on your next interaction. No restart.
+
+The installer merges into `~/.claude/settings.json`, so your hooks, model and
+permissions are left alone. **Nothing here installs a toolchain for you.**
 
 ## Which version
 
-Two implementations, byte-identical output, verified by `scripts/parity.py`.
+Three ways in, same output from all of them. `install.sh` picks the first that
+works, or you can name one.
 
 | | needs | CPU per render |
 |---|---|---|
-| `rust/` | cargo | 3 ms |
-| `scripts/statusline.py` | python3 only | 114 ms |
+| `./install.sh binary` | `gh`, and repo access | **2.3 ms** |
+| `./install.sh rust` | cargo, about 1.5 GB of toolchain | **2.3 ms** |
+| `./install.sh python` | nothing | 107 ms |
 
-**Python is fine for most people.** The status line re-runs on every event, so
-the cost only matters if you run several Claude Code sessions at once, where it
-multiplies. At ten concurrent sessions that is the difference between 10% and
-80% of a CPU core.
+The released binary is universal, so it runs on Apple Silicon and Intel, and it
+ships with a SHA-256 that the installer checks before putting it in place.
 
-The Rust binary is not distributed prebuilt. Build it yourself from source in
-about twenty seconds, which is also how you know what you are running.
+### Is the speed worth caring about
+
+Measured on an M-series Mac against the eleven-line bash example from the Claude
+Code docs, extended with a token count, so that both show comparable
+information. CPU time per render, median of repeated runs:
+
+| | CPU per render |
+|---|---|
+| docs example (bash + 4 jq) | ~98 ms |
+| this, python | ~107 ms |
+| this, rust | **~2.3 ms** |
+
+So the Rust build is **40x cheaper**, and the Python build is not faster than
+the docs example at all. Be honest with yourself about which you are installing.
+
+The reason is process count. Each `jq` in a shell status line is another
+process, so cost grows as you add fields. This parses the payload once, so it
+does not.
+
+None of this is perceptible at one session. The status line re-runs on every
+event, debounced at 300 ms, so it only compounds when several Claude Code
+sessions are working at once. At ten concurrent sessions it is the difference
+between 10% and 80% of a CPU core.
+
+Install Python if you want the features. Install the binary if you also want the
+speed. Both take one command.
 
 ## What it reads
 
@@ -144,6 +165,14 @@ changing those changes the meters too.
 
 **`truecolor`** forces 24-bit on or off. Omit it to detect from `COLORTERM`.
 
+Try a theme before committing to it:
+
+```sh
+statusline --preview            all six, with sample data
+statusline --preview gruvbox    just that one
+statusline --init               write a commented config with every default
+```
+
 Rebuild after editing the Rust source:
 
 ```sh
@@ -152,6 +181,16 @@ cd rust && cargo build --release
 
 The binary does not rebuild itself, so an edit does nothing until you run that.
 Config changes need no rebuild, since the file is read at each render.
+
+## Cutting a release
+
+```sh
+./scripts/build-release.sh v1.0.1
+```
+
+Builds both Apple targets, merges them with `lipo`, writes a checksum, smoke
+tests the result and uploads it. Needs `rustup target add x86_64-apple-darwin`
+once.
 
 ## After changing output
 

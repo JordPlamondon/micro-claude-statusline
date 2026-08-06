@@ -20,6 +20,9 @@ pub struct Config {
     pub bottom_spacing: usize,
     /// None means auto-detect from COLORTERM.
     pub truecolor: Option<bool>,
+    /// Internal, never read from JSON. Preview turns it off so a sample bar
+    /// shows the sample's session name rather than the caller's real workspace.
+    pub use_herdr: bool,
 }
 
 impl Default for Config {
@@ -42,6 +45,7 @@ impl Default for Config {
             gap_scale: 1.0,
             bottom_spacing: 1,
             truecolor: None,
+            use_herdr: true,
         }
     }
 }

@@ -1,15 +1,20 @@
 #!/bin/sh
 # Installs the Claude Code status line.
 #
-#   ./install.sh          build the Rust binary if cargo is present, else Python
-#   ./install.sh python   force the Python version, no toolchain needed
-#   ./install.sh rust     force the Rust version, requires cargo
+#   ./install.sh            download the prebuilt binary, else build, else Python
+#   ./install.sh binary     download the released universal binary (needs gh)
+#   ./install.sh rust       build from source (needs cargo)
+#   ./install.sh python     no toolchain at all
+#
+# Nothing here installs a toolchain for you. If cargo is missing the installer
+# picks another path rather than fetching Rust behind your back.
 #
 # Writes the statusLine block into ~/.claude/settings.json and leaves every
 # other setting untouched.
 
 set -eu
 
+REPO="JordPlamondon/claude-statusline"
 ROOT=$(cd "$(dirname "$0")" && pwd)
 SETTINGS="${HOME}/.claude/settings.json"
 choice="${1:-auto}"
@@ -24,20 +29,59 @@ command -v python3 >/dev/null 2>&1 || {
   exit 1
 }
 
+have_release() {
+  command -v gh >/dev/null 2>&1 || return 1
+  gh release view --repo "$REPO" >/dev/null 2>&1
+}
+
 case "$choice" in
   auto)
-    if command -v cargo >/dev/null 2>&1; then choice=rust; else choice=python; fi
+    if have_release; then
+      choice=binary
+    elif command -v cargo >/dev/null 2>&1; then
+      # Worth saying out loud: a gh that cannot see the repo is usually an auth
+      # or access problem, not an absent release, and silently building from
+      # source hides that.
+      if command -v gh >/dev/null 2>&1; then
+        echo "gh cannot read $REPO. Check 'gh auth status' and that you have"
+        echo "access to the repo. Falling back to building from source."
+      fi
+      choice=rust
+    else
+      if command -v gh >/dev/null 2>&1; then
+        echo "gh cannot read $REPO, and cargo is not installed."
+      fi
+      choice=python
+    fi
     ;;
-  python|rust) ;;
-  *) echo "usage: $0 [python|rust]" >&2; exit 1 ;;
+  binary|python|rust) ;;
+  *) echo "usage: $0 [binary|rust|python]" >&2; exit 1 ;;
 esac
 
-if [ "$choice" = rust ]; then
+if [ "$choice" = binary ]; then
+  command -v gh >/dev/null 2>&1 || {
+    echo "gh not found. Install it, or run: $0 python" >&2
+    exit 1
+  }
+  DEST="$ROOT/bin"
+  mkdir -p "$DEST"
+  echo "Downloading the prebuilt universal binary."
+  gh release download --repo "$REPO" --pattern statusline --dir "$DEST" --clobber
+  gh release download --repo "$REPO" --pattern statusline.sha256 --dir "$DEST" --clobber 2>/dev/null || true
+  if [ -f "$DEST/statusline.sha256" ]; then
+    ( cd "$DEST" && shasum -a 256 -c statusline.sha256 ) || {
+      echo "Checksum did not match. Refusing to install." >&2
+      exit 1
+    }
+  fi
+  chmod +x "$DEST/statusline"
+  COMMAND="$DEST/statusline"
+elif [ "$choice" = rust ]; then
   command -v cargo >/dev/null 2>&1 || {
     echo "cargo not found. Install Rust from https://rustup.rs, or run: $0 python" >&2
     exit 1
   }
-  echo "Building the Rust binary. This takes about 20 seconds the first time."
+  echo "Building from source. About twenty seconds the first time."
   ( cd "$ROOT/rust" && cargo build --release --quiet )
   COMMAND="$ROOT/rust/target/release/statusline"
 else

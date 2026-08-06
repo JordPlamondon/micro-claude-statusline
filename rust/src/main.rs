@@ -10,6 +10,7 @@
 //! Output must stay byte-identical to the js and python implementations. See
 //! scripts/parity.py.
 
+mod cli;
 mod config;
 mod json;
 mod theme;
@@ -325,8 +326,9 @@ fn herdr_workspace_name() -> Option<String> {
 }
 
 /// Prefer the herdr workspace label, which is what its tab bar shows.
-fn session_label(data: &Value, width: usize) -> Option<String> {
-    let name = herdr_workspace_name().or_else(|| data.str_path("session_name"))?;
+fn session_label(data: &Value, width: usize, use_herdr: bool) -> Option<String> {
+    let herdr = if use_herdr { herdr_workspace_name() } else { None };
+    let name = herdr.or_else(|| data.str_path("session_name"))?;
     let chars: Vec<char> = name.chars().collect();
     if chars.len() > width {
         let head: String = chars[..width - 1].iter().collect();
@@ -348,7 +350,8 @@ fn segment(name: &str, ctx: &Ctx, data: &Value) -> Option<String> {
     let p = &cfg.palette;
 
     match name {
-        "session" => session_label(data, cfg.session_name_width).map(|n| ctx.paint(&n, p.brightest)),
+        "session" => session_label(data, cfg.session_name_width, cfg.use_herdr)
+            .map(|n| ctx.paint(&n, p.brightest)),
 
         "model" => data
             .path("model.display_name")
@@ -477,44 +480,31 @@ fn build_line(names: &[String], ctx: &Ctx, data: &Value) -> String {
     parts.join(&sep)
 }
 
-fn main() {
-    let mut raw = String::new();
-    if std::io::stdin().read_to_string(&mut raw).is_err() {
-        return;
-    }
+fn detect_truecolor(cfg: &Config) -> bool {
+    cfg.truecolor.unwrap_or_else(|| {
+        matches!(
+            std::env::var("COLORTERM").as_deref(),
+            Ok("truecolor") | Ok("24bit")
+        )
+    })
+}
 
-    let cfg = config::load();
+/// The whole bar, or None when there is nothing worth printing.
+fn render(cfg: &Config, data: &Value) -> Option<String> {
     let ctx = Ctx {
-        truecolor: cfg.truecolor.unwrap_or_else(|| {
-            matches!(
-                std::env::var("COLORTERM").as_deref(),
-                Ok("truecolor") | Ok("24bit")
-            )
-        }),
-        cfg: &cfg,
-    };
-
-    // --themes prints the available names, for the README and for anyone poking.
-    if std::env::args().any(|a| a == "--themes") {
-        println!("{}", theme::NAMES.join("\n"));
-        return;
-    }
-
-    let data = match json::parse(raw.trim()) {
-        Some(v @ Value::Obj(_)) => v,
-        // Non-object JSON and malformed input both render nothing.
-        _ => return,
+        truecolor: detect_truecolor(cfg),
+        cfg,
     };
 
     let lines: Vec<String> = [
-        build_line(&cfg.line1, &ctx, &data),
-        build_line(&cfg.line2, &ctx, &data),
+        build_line(&cfg.line1, &ctx, data),
+        build_line(&cfg.line2, &ctx, data),
     ]
     .into_iter()
     .filter(|l| !l.is_empty())
     .collect();
     if lines.is_empty() {
-        return;
+        return None;
     }
 
     let gap: Vec<String> = match cfg.gap.as_str() {
@@ -543,5 +533,110 @@ fn main() {
         rows.push(BLANK_ROW.to_string());
     }
 
-    let _ = std::io::stdout().write_all((rows.join("\n") + "\n").as_bytes());
+    Some(rows.join("\n") + "\n")
+}
+
+const HELP: &str = "\
+claude-statusline
+
+  (no arguments)      read the Claude Code payload on stdin, print the bar
+  --preview [THEME]   render a sample bar, all themes if none is named
+  --init [--force]    write a commented ~/.claude/statusline.json
+  --themes            list theme names
+  --help              this
+";
+
+/// Renders the sample payload under one theme, ignoring the user's config so
+/// the comparison is like for like.
+fn preview_one(name: &str, data: &Value, out: &mut String) {
+    let mut cfg = Config::default();
+    cfg.palette = theme::by_name(name);
+    // Keep the user's colour depth so the preview matches what they will see.
+    cfg.truecolor = Some(detect_truecolor(&Config::default()));
+    // A preview is about the theme, not about where the caller happens to be.
+    cfg.use_herdr = false;
+
+    out.push_str(&format!("  {name}\n"));
+    if let Some(bar) = render(&cfg, data) {
+        for line in bar.trim_end().lines() {
+            out.push_str(&format!("    {line}\n"));
+        }
+    }
+    out.push('\n');
+}
+
+fn preview(requested: Option<&str>) -> i32 {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let raw = cli::sample_payload(now);
+    let Some(data) = json::parse(raw.trim()) else {
+        eprintln!("internal: sample payload did not parse");
+        return 1;
+    };
+
+    let mut out = String::new();
+    match requested {
+        Some(name) => {
+            if !theme::NAMES.contains(&name) {
+                eprintln!("unknown theme: {name}");
+                eprintln!("try one of: {}", theme::NAMES.join(", "));
+                return 1;
+            }
+            preview_one(name, &data, &mut out);
+        }
+        None => {
+            out.push_str("sample data, not your session\n\n");
+            for name in theme::NAMES {
+                preview_one(name, &data, &mut out);
+            }
+        }
+    }
+    // Written rather than printed: piping to `head` closes the pipe early, and
+    // println! panics on EPIPE.
+    let _ = std::io::stdout().write_all(out.as_bytes());
+    0
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let flag = |name: &str| args.iter().any(|a| a == name);
+
+    if flag("--help") || flag("-h") {
+        print!("{HELP}");
+        return;
+    }
+    if flag("--themes") {
+        cli::themes();
+        return;
+    }
+    if flag("--init") {
+        std::process::exit(cli::init(flag("--force")));
+    }
+    if flag("--preview") {
+        // The value after --preview, if it is not itself a flag.
+        let named = args
+            .iter()
+            .position(|a| a == "--preview")
+            .and_then(|i| args.get(i + 1))
+            .filter(|a| !a.starts_with('-'))
+            .map(String::as_str);
+        std::process::exit(preview(named));
+    }
+
+    let mut raw = String::new();
+    if std::io::stdin().read_to_string(&mut raw).is_err() {
+        return;
+    }
+
+    let data = match json::parse(raw.trim()) {
+        Some(v @ Value::Obj(_)) => v,
+        // Non-object JSON and malformed input both render nothing.
+        _ => return,
+    };
+
+    if let Some(bar) = render(&config::load(), &data) {
+        let _ = std::io::stdout().write_all(bar.as_bytes());
+    }
 }
