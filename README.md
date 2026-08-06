@@ -255,46 +255,10 @@ The binary does not rebuild itself, and `~/.claude/bin/statusline` is a copy
 rather than a link, so an edit does nothing until you do both. Config changes
 need neither, since the file is read at each render.
 
-## Cutting a release
+## Changing it
 
-```sh
-./scripts/build-release.sh v1.0.1
-```
-
-Builds both Apple targets, merges them with `lipo`, writes a checksum, smoke
-tests the result and uploads it. Needs `rustup target add x86_64-apple-darwin`
-once.
-
-## After changing output
-
-```sh
-cd rust && cargo build --release && cd ..
-python3 scripts/golden.py
-```
-
-372 recorded cases in `tests/golden.txt`, compared byte for byte. Every whole
-percent through the meters, token and duration boundaries, all PR states,
-worktrees, every theme, config permutations, ten terminal widths, and missing
-or malformed input, under both 24-bit and 256-colour.
-
-Time is pinned with `$STATUSLINE_TEST_PINNED_CLOCK`, `$COLUMNS` is pinned, and
-`$HOME` is redirected to a scratch directory, so the same input produces the
-same bytes on any machine at any time of day.
-
-If a change is intended, re-record it and read the diff before committing:
-
-```sh
-python3 scripts/golden.py --update
-git diff tests/golden.txt
-```
-
-This is worth running. The case list caught a currency bug that only appeared at
-`$0.005`, where scaling by 100 before rounding lands on exactly `0.5` in
-floating point and loses the tie-break.
-
-The expectations were originally recorded from a separate Python implementation
-that has since been removed, so they pin reviewed behaviour rather than
-whatever the current code happens to do.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the test suite and how releases are
+cut. Config changes need none of that: the file is read fresh on every render.
 
 ## Notes
 
