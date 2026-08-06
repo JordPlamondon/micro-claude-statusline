@@ -32,6 +32,10 @@ It applies on your next interaction. No restart.
 The installer merges into `~/.claude/settings.json`, so your hooks, model and
 permissions are left alone. **Nothing here installs a toolchain for you.**
 
+It also symlinks the binary into `~/.local/bin` when that is on your PATH, so
+the `statusline` command below works. If it is not, run the binary by its full
+path instead: `rust/target/release/statusline` or `bin/statusline`.
+
 ## Two ways in
 
 Same binary either way. `install.sh` downloads it if it can, builds it if not.

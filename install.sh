@@ -85,6 +85,21 @@ else
   COMMAND="$ROOT/rust/target/release/statusline"
 fi
 
+# A symlink on PATH, so `statusline --preview` and `statusline --init` work
+# without typing the full path. Skipped when ~/.local/bin is not on PATH, since
+# putting it there would then be pointless.
+case ":${PATH}:" in
+  *":${HOME}/.local/bin:"*)
+    mkdir -p "${HOME}/.local/bin"
+    ln -sf "$COMMAND" "${HOME}/.local/bin/statusline"
+    echo "  statusline -> ${HOME}/.local/bin/statusline"
+    ;;
+  *)
+    echo "  ~/.local/bin is not on your PATH, so the statusline command is not linked."
+    echo "  Run it as $COMMAND, or add that directory to PATH."
+    ;;
+esac
+
 # Merge rather than overwrite: this file holds hooks, model and permissions too.
 python3 - "$SETTINGS" "$COMMAND" <<'PY'
 import json, os, sys
@@ -115,5 +130,12 @@ PY
 
 echo
 echo "Done. It appears on your next interaction, no restart needed."
-echo "Preview it now with:"
-echo "  echo '{\"model\":{\"display_name\":\"Opus 5\"},\"workspace\":{\"current_dir\":\"'\"\$PWD\"'\"},\"context_window\":{\"used_percentage\":42}}' | $COMMAND"
+echo
+echo "Have a look at the themes:"
+if [ -L "${HOME}/.local/bin/statusline" ]; then
+  echo "  statusline --preview        all six"
+  echo "  statusline --init           write a config you can edit"
+else
+  echo "  $COMMAND --preview"
+  echo "  $COMMAND --init"
+fi
