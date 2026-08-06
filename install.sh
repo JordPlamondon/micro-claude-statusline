@@ -8,8 +8,9 @@
 # Nothing here installs a toolchain for you. If cargo is missing the installer
 # says so rather than fetching Rust behind your back.
 #
-# Writes the statusLine block into ~/.claude/settings.json and leaves every
-# other setting untouched.
+# The binary is copied to ~/.claude/bin, so this checkout can be deleted
+# afterwards. Writes the statusLine block into ~/.claude/settings.json and
+# leaves every other setting untouched.
 
 set -eu
 
@@ -74,7 +75,7 @@ if [ "$choice" = binary ]; then
     }
   fi
   chmod +x "$DEST/statusline"
-  COMMAND="$DEST/statusline"
+  BUILT="$DEST/statusline"
 else
   command -v cargo >/dev/null 2>&1 || {
     echo "cargo not found. Install Rust from https://rustup.rs, or run: $0 binary" >&2
@@ -82,12 +83,23 @@ else
   }
   echo "Building from source. About twenty seconds the first time."
   ( cd "$ROOT/rust" && cargo build --release --quiet )
-  COMMAND="$ROOT/rust/target/release/statusline"
+  BUILT="$ROOT/rust/target/release/statusline"
 fi
+
+# Copy out of the checkout before pointing anything at it. Otherwise deleting
+# the clone later leaves settings.json aimed at a path that no longer exists,
+# and the status line just stops with no explanation.
+INSTALLED="${HOME}/.claude/bin/statusline"
+mkdir -p "${HOME}/.claude/bin"
+cp "$BUILT" "$INSTALLED"
+chmod +x "$INSTALLED"
+COMMAND="$INSTALLED"
 
 # A symlink on PATH, so `statusline --preview` and `statusline --init` work
 # without typing the full path. Skipped when ~/.local/bin is not on PATH, since
 # putting it there would then be pointless.
+echo "  binary     -> $COMMAND"
+
 case ":${PATH}:" in
   *":${HOME}/.local/bin:"*)
     mkdir -p "${HOME}/.local/bin"

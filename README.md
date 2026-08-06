@@ -36,9 +36,11 @@ It applies on your next interaction. No restart.
 The installer merges into `~/.claude/settings.json`, so your hooks, model and
 permissions are left alone. **Nothing here installs a toolchain for you.**
 
-It also symlinks the binary into `~/.local/bin` when that is on your PATH, so
-the `statusline` command below works. If it is not, run the binary by its full
-path instead: `rust/target/release/statusline` or `bin/statusline`.
+The binary is copied to `~/.claude/bin/statusline`, so **you can delete this
+checkout afterwards**. It is also symlinked into `~/.local/bin` when that is on
+your PATH, which is what makes the `statusline` command below work.
+
+To update later, clone again and re-run `./install.sh`.
 
 ## Two ways in
 
@@ -186,14 +188,17 @@ statusline --preview            all six, stacked
 statusline --preview gruvbox    just that one
 ```
 
-Rebuild after editing the Rust source:
+Rebuild after editing the Rust source, then re-run the installer to copy the
+new binary into place:
 
 ```sh
-cd rust && cargo build --release
+cd rust && cargo build --release && cd ..
+./install.sh rust
 ```
 
-The binary does not rebuild itself, so an edit does nothing until you run that.
-Config changes need no rebuild, since the file is read at each render.
+The binary does not rebuild itself, and `~/.claude/bin/statusline` is a copy
+rather than a link, so an edit does nothing until you do both. Config changes
+need neither, since the file is read at each render.
 
 ## Cutting a release
 
