@@ -132,23 +132,21 @@ fn segments_at(v: &Value, key: &str, current: Vec<String>) -> Vec<String> {
 /// you set explicitly still wins. "compact" collapses the whole thing to one
 /// row for people who do not want four lines of chrome above the prompt.
 pub fn apply_preset(cfg: &mut Config, name: &str) {
-    match name {
-        "compact" => {
-            // Everything on one row. Model is dropped rather than shortened:
-            // it is identical in every session, so it is the least informative
-            // thing competing for the space.
-            cfg.line1 = ["session", "location", "context", "limits", "cost"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect();
-            cfg.line2 = Vec::new();
-            cfg.bar_width = 10;
-            cfg.limit_bar_width = 4;
-            cfg.gap = "none".to_string();
-            cfg.bottom_spacing = 0;
-        }
-        // "full" is the default shape, named so it can be stated explicitly.
-        _ => {}
+    // "full" is the default shape, named so it can be stated explicitly, and
+    // an unrecognised name is ignored the same way.
+    if name == "compact" {
+        // Everything on one row. Model is dropped rather than shortened: it is
+        // identical in every session, so it is the least informative thing
+        // competing for the space.
+        cfg.line1 = ["session", "location", "context", "limits", "cost"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        cfg.line2 = Vec::new();
+        cfg.bar_width = 10;
+        cfg.limit_bar_width = 4;
+        cfg.gap = "none".to_string();
+        cfg.bottom_spacing = 0;
     }
 }
 
@@ -218,9 +216,8 @@ pub fn load() -> Config {
             cfg.gap_scale = scale;
         }
     }
-    match v.path("truecolor") {
-        Some(Value::Bool(b)) => cfg.truecolor = Some(*b),
-        _ => {}
+    if let Some(Value::Bool(b)) = v.path("truecolor") {
+        cfg.truecolor = Some(*b);
     }
     if let Some(Value::Bool(b)) = v.path("responsive") {
         cfg.responsive = *b;

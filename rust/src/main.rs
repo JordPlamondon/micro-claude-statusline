@@ -74,6 +74,10 @@ fn to_256(c: Rgb) -> u8 {
 struct Ctx<'a> {
     cfg: &'a Config,
     truecolor: bool,
+    /// What divides two things on a row. Built once, because both the row
+    /// builder and the rate-limit segment need it and two copies of the same
+    /// format string is one copy too many to keep in step.
+    sep: String,
 }
 
 /// Strips control characters, so text we did not write cannot become escapes.
@@ -99,13 +103,27 @@ fn strip_controls(text: &str) -> String {
         .collect()
 }
 
+/// Foreground escape for a colour, at the depth the terminal supports.
+fn fg_code(c: Rgb, truecolor: bool) -> String {
+    if truecolor {
+        format!("\x1b[38;2;{};{};{}m", c.0, c.1, c.2)
+    } else {
+        format!("\x1b[38;5;{}m", to_256(c))
+    }
+}
+
 impl<'a> Ctx<'a> {
-    fn fg(&self, c: Rgb) -> String {
-        if self.truecolor {
-            format!("\x1b[38;2;{};{};{}m", c.0, c.1, c.2)
-        } else {
-            format!("\x1b[38;5;{}m", to_256(c))
+    fn new(cfg: &'a Config, truecolor: bool) -> Self {
+        let sep = format!(" {}│{RESET} ", fg_code(cfg.palette.separator, truecolor));
+        Ctx {
+            cfg,
+            truecolor,
+            sep,
         }
+    }
+
+    fn fg(&self, c: Rgb) -> String {
+        fg_code(c, self.truecolor)
     }
 
     /// The single choke point for anything derived from outside this program.
@@ -229,14 +247,14 @@ fn display_width(text: &str) -> usize {
 fn round_half_even(x: f64) -> f64 {
     let floor = x.floor();
     let diff = x - floor;
-    if diff > 0.5 {
+    // Exactly half rounds towards the even neighbour, which is the whole point
+    // of this function and was previously spread across four branches, two of
+    // which returned the same thing.
+    let up = diff > 0.5 || (diff == 0.5 && (floor % 2.0) != 0.0);
+    if up {
         floor + 1.0
-    } else if diff < 0.5 {
-        floor
-    } else if (floor % 2.0) == 0.0 {
-        floor
     } else {
-        floor + 1.0
+        floor
     }
 }
 
@@ -544,8 +562,7 @@ fn limits(ctx: &Ctx, data: &Value, wanted: &[(&str, &str)]) -> Option<String> {
         .iter()
         .filter_map(|(key, label)| limit_window(ctx, data, key, label))
         .collect();
-    let sep = format!(" {}│{} ", ctx.fg(ctx.cfg.palette.separator), RESET);
-    (!parts.is_empty()).then(|| parts.join(&sep))
+    (!parts.is_empty()).then(|| parts.join(&ctx.sep))
 }
 
 /// Both windows in one segment, matching how they read together.
@@ -576,7 +593,9 @@ fn seg_cost(ctx: &Ctx, data: &Value) -> Option<String> {
 /// A table rather than one long match: each renderer is independently
 /// readable, and the names live in one place rather than scattered through
 /// arms, so `--init` can list them without a second copy going stale.
-const SEGMENTS: [(&str, fn(&Ctx, &Value) -> Option<String>); 10] = [
+type Renderer = fn(&Ctx, &Value) -> Option<String>;
+
+const SEGMENTS: [(&str, Renderer); 10] = [
     ("session", seg_session),
     ("model", seg_model),
     ("location", seg_location),
@@ -615,12 +634,11 @@ fn terminal_width() -> Option<usize> {
 }
 
 fn joined(parts: &[(String, String)], ctx: &Ctx) -> String {
-    let sep = format!(" {}│{} ", ctx.fg(ctx.cfg.palette.separator), RESET);
     parts
         .iter()
         .map(|(_, rendered)| rendered.as_str())
         .collect::<Vec<_>>()
-        .join(&sep)
+        .join(&ctx.sep)
 }
 
 /// Builds a row, shedding segments in `drop_order` while it overflows.
@@ -636,17 +654,24 @@ fn build_line(names: &[String], ctx: &Ctx, data: &Value, budget: Option<usize>) 
         .filter(|(_, s)| !s.is_empty())
         .collect();
 
-    let Some(budget) = budget else {
-        return joined(&parts, ctx);
-    };
+    let mut row = joined(&parts, ctx);
+    let Some(budget) = budget else { return row };
 
+    // Remeasure only when something actually went. Most candidates in
+    // drop_order are not on this row at all, and rebuilding the whole string
+    // to discover that a no-op changed nothing is work with no question behind
+    // it.
     for candidate in &ctx.cfg.drop_order {
-        if display_width(&joined(&parts, ctx)) <= budget {
+        if display_width(&row) <= budget {
             break;
         }
+        let before = parts.len();
         parts.retain(|(name, _)| name != candidate);
+        if parts.len() != before {
+            row = joined(&parts, ctx);
+        }
     }
-    joined(&parts, ctx)
+    row
 }
 
 fn detect_truecolor(cfg: &Config) -> bool {
@@ -660,10 +685,7 @@ fn detect_truecolor(cfg: &Config) -> bool {
 
 /// The whole bar, or None when there is nothing worth printing.
 fn render(cfg: &Config, data: &Value) -> Option<String> {
-    let ctx = Ctx {
-        truecolor: detect_truecolor(cfg),
-        cfg,
-    };
+    let ctx = Ctx::new(cfg, detect_truecolor(cfg));
 
     let budget = if cfg.responsive { terminal_width() } else { None };
 

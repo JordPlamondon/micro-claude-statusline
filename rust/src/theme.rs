@@ -42,7 +42,9 @@ pub struct Palette {
 /// CONFIG.md. Binding them to the fields here means the parser cannot drift
 /// from the struct: adding a field and forgetting to extend the parser used to
 /// mean a slot that documented itself and then quietly did nothing.
-pub const SLOTS: [(&str, fn(&mut Palette, Rgb)); 13] = [
+type SetSlot = fn(&mut Palette, Rgb);
+
+pub const SLOTS: [(&str, SetSlot); 13] = [
     ("separator", |p, c| p.separator = c),
     ("dim", |p, c| p.dim = c),
     ("muted", |p, c| p.muted = c),
