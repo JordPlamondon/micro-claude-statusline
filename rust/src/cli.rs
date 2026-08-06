@@ -63,6 +63,13 @@ pub const DEFAULT_CONFIG: &str = r#"{
   "// slots": "separator, dim, muted, bright, brightest, accent_a, accent_b, accent_c, model, good, warn, bad, notice",
   "colors": {},
 
+  "// responsive": "shed segments rather than let a row wrap. false keeps them all.",
+  "responsive": true,
+
+  "// drop_order": "order segments are shed in when a row will not fit, first to go first",
+  "// note on drop_order": "anything left out is never shed, which is why context and location survive",
+  "drop_order": ["cost", "modes", "model", "pr", "limits", "session"],
+
   "// truecolor": "true or false to force, omit to detect from COLORTERM",
   "// note": "keys beginning with // are ignored, they are notes to yourself"
 }

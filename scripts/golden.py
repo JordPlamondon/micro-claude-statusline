@@ -58,7 +58,7 @@ def find_binary():
     )
 
 
-def run(binary, stdin, env, home):
+def run(binary, stdin, env, home, args=()):
     full = dict(os.environ)
     # A stable environment, so the output cannot depend on the machine.
     full.pop("HERDR_WORKSPACE_ID", None)
@@ -69,7 +69,7 @@ def run(binary, stdin, env, home):
     # Wide enough that nothing sheds unless a case sets it deliberately.
     full["COLUMNS"] = "999"
     full.update(env)
-    cmd = binary if isinstance(binary, list) else [binary]
+    cmd = (binary if isinstance(binary, list) else [binary]) + list(args)
     return subprocess.run(
         cmd, input=stdin.encode(), capture_output=True, env=full
     ).stdout
@@ -98,6 +98,20 @@ def collect(binary, workdir):
                 json.dump(cfg, fh)
             out = run(binary, json.dumps(CONFIG_PAYLOAD), dict(env_depth), cfg_home)
             results.append((f"{depth} | config | {name}", out))
+
+        # --init tells the user every value it writes is already the default.
+        # Rendering with what it writes must therefore produce what no config
+        # at all produces. Recording it means a template that drifts from
+        # Config::default() shows up here instead of quietly lying to whoever
+        # ran --init and believed it.
+        init_home = os.path.join(workdir, "initialised")
+        os.makedirs(os.path.join(init_home, ".claude"), exist_ok=True)
+        written = os.path.join(init_home, ".claude", "statusline.json")
+        if os.path.exists(written):
+            os.remove(written)
+        run(binary, "", dict(env_depth), init_home, args=["--init"])
+        out = run(binary, json.dumps(CONFIG_PAYLOAD), dict(env_depth), init_home)
+        results.append((f"{depth} | config | --init template", out))
 
         # Narrow terminals, where segments are shed rather than the row wrapping.
         # Twice: once in ASCII, once with a session name whose characters are
