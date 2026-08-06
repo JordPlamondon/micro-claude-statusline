@@ -49,7 +49,7 @@ cp "$ROOT/rust/target/$INTEL/release/statusline" "$OUT/statusline-x86_64"
 
 echo
 for f in statusline-arm64 statusline-x86_64; do
-  printf '  %-20s %-8s ' "$f" "$(lipo -archs "$OUT/$f")"
+  printf '  %-20s %-8s ' "$f" "$(file -b "$OUT/$f" | grep -oE 'arm64|x86_64' | head -1)"
   ls -l "$OUT/$f" | awk '{printf "%.0f KB\n", $5/1024}'
 done
 

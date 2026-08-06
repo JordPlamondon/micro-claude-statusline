@@ -63,6 +63,16 @@ if [ "$choice" = binary ]; then
     echo "gh not found. Install it, or run: $0 rust" >&2
     exit 1
   }
+  # Releases carry macOS builds only. Without this check the dispatch below
+  # matches on architecture alone, so an aarch64 Linux box happily downloads
+  # the Apple arm64 binary, verifies it, marks it executable and writes
+  # settings.json, then fails to exec with nothing explaining why.
+  if [ "$(uname -s)" != "Darwin" ]; then
+    echo "Prebuilt binaries are macOS only. On $(uname -s), build from source:" >&2
+    echo "  $0 rust" >&2
+    exit 1
+  fi
+
   # One binary per architecture rather than a universal one: on Apple Silicon a
   # fat binary containing an x86_64 slice costs about 20 ms per exec, ten times
   # this program's entire runtime.

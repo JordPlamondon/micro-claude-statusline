@@ -44,12 +44,15 @@ and permissions alone. The binary is copied to `~/.claude/bin/statusline`, so
 
 To update, clone again and re-run `./install.sh`.
 
-macOS only. There is a binary per architecture and the installer picks one, and
-verifies its SHA-256 before making it executable.
+Prebuilt binaries are macOS only. There is one per architecture, the installer
+picks it, and verifies its SHA-256 before making it executable. On anything else
+it stops and tells you rather than installing a binary that cannot run.
 
-Prefer to compile it yourself, or on Linux? `./install.sh rust`, which needs
-cargo and therefore about 1.5 GB of Rust toolchain. Everyone else should ignore
-that.
+Prefer to compile it yourself? `./install.sh rust`, which needs cargo and
+therefore about 1.5 GB of Rust toolchain. Everyone else should ignore that.
+
+The source has no platform-specific code, so a Linux build should work, but
+nobody has tried it. If you do, say whether it worked.
 
 ## Speed
 
