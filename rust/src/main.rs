@@ -337,7 +337,16 @@ fn session_label(data: &Value, width: usize, use_herdr: bool) -> Option<String> 
     Some(name)
 }
 
+/// Wall clock, unless $STATUSLINE_NOW pins it.
+///
+/// Only the golden-file tests set that, so countdowns render the same bytes on
+/// every machine and at every time of day. Same idea as SOURCE_DATE_EPOCH.
 fn now_secs() -> f64 {
+    if let Ok(pinned) = std::env::var("STATUSLINE_NOW") {
+        if let Ok(secs) = pinned.parse::<f64>() {
+            return secs;
+        }
+    }
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs_f64())

@@ -1,37 +1,26 @@
 #!/usr/bin/env python3
-"""Byte-for-byte parity check between the Python and Rust implementations.
+"""The shared case list, used to generate golden files and to check against them.
 
-Feeds identical stdin and environment to both, then compares raw bytes. Run it
-after any change that touches output. It is what catches the subtle ones, such
-as a currency rounding difference that only shows at $0.005.
-
-    python3 scripts/parity.py
-
-Set COLORTERM=truecolor to exercise the 24-bit path, or unset it for the
-256-colour fallback. Both should report every case identical.
-
-Implementations that are not present are skipped rather than failing, so this
-works whether or not the Rust binary has been built.
+Cases must be deterministic. Anything time-based is expressed as an offset from
+a fixed epoch rather than from now, so the same input always produces the same
+bytes. FIXED_NOW is passed to the binary as $STATUSLINE_NOW.
 """
 
 import json
-import os
-import subprocess
-import sys
-import time
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PY = os.path.join(ROOT, "scripts", "statusline.py")
-RS = os.path.join(ROOT, "rust", "target", "release", "statusline")
+# An arbitrary fixed instant. Only the offsets from it matter.
+FIXED_NOW = 1_800_000_000
 
-HOME = os.path.expanduser("~")
-NOW = int(time.time())
-
-cases = []
+# Paths must exist identically on every machine, so no home directory here.
+CASES = []
 
 
 def case(name, payload, env=None):
-    cases.append((name, payload, env or {}))
+    CASES.append({"name": name, "stdin": json.dumps(payload), "env": env or {}})
+
+
+def raw_case(name, stdin):
+    CASES.append({"name": name, "stdin": stdin, "env": {}})
 
 
 # --- baseline shapes ---------------------------------------------------------
@@ -42,7 +31,7 @@ case(
     {
         "session_name": "Mole cleanup",
         "model": {"display_name": "Opus 5 (1M context)"},
-        "workspace": {"current_dir": HOME},
+        "workspace": {"current_dir": "/tmp"},
         "context_window": {
             "used_percentage": 25,
             "total_input_tokens": 254000,
@@ -52,13 +41,13 @@ case(
         "effort": {"level": "xhigh"},
         "pr": {"number": 265, "review_state": "approved"},
         "rate_limits": {
-            "five_hour": {"used_percentage": 38, "resets_at": NOW + 8400},
-            "seven_day": {"used_percentage": 52, "resets_at": NOW + 437400},
+            "five_hour": {"used_percentage": 38, "resets_at": FIXED_NOW + 8400},
+            "seven_day": {"used_percentage": 52, "resets_at": FIXED_NOW + 437400},
         },
     },
 )
 
-# --- meters: every whole percent, to catch rounding divergence ---------------
+# --- meters: every whole percent, to catch rounding drift --------------------
 for pct in range(0, 101):
     case(
         f"meter {pct}%",
@@ -114,7 +103,7 @@ for offset in (-50, 0, 60, 900, 3599, 3600, 8400, 86340, 86400, 90000, 437400, 6
             "model": {"display_name": "M"},
             "workspace": {"current_dir": "/tmp"},
             "rate_limits": {
-                "five_hour": {"used_percentage": 40, "resets_at": NOW + offset}
+                "five_hour": {"used_percentage": 40, "resets_at": FIXED_NOW + offset}
             },
         },
     )
@@ -130,8 +119,8 @@ for state in ("approved", "changes_requested", "pending", "draft", "weird", None
         payload["pr"]["review_state"] = state
     case(f"pr {state}", payload)
 
-# --- location / git shapes ---------------------------------------------------
-for path in (HOME, "/tmp", "/", os.path.join(HOME, "does-not-exist"), ""):
+# --- location shapes ---------------------------------------------------------
+for path in ("/tmp", "/", "/tmp/definitely-not-here", ""):
     case(
         f"cwd {path or '(empty)'}",
         {"model": {"display_name": "M"}, "workspace": {"current_dir": path}},
@@ -139,17 +128,11 @@ for path in (HOME, "/tmp", "/", os.path.join(HOME, "does-not-exist"), ""):
 
 case(
     "worktree field set",
-    {
-        "model": {"display_name": "M"},
-        "workspace": {"current_dir": "/tmp", "git_worktree": "wt"},
-    },
+    {"model": {"display_name": "M"}, "workspace": {"current_dir": "/tmp", "git_worktree": "wt"}},
 )
 case(
     "worktree matches dir",
-    {
-        "model": {"display_name": "M"},
-        "workspace": {"current_dir": "/tmp", "git_worktree": "tmp"},
-    },
+    {"model": {"display_name": "M"}, "workspace": {"current_dir": "/tmp", "git_worktree": "tmp"}},
 )
 case(
     "top-level worktree.name",
@@ -160,7 +143,7 @@ case(
     },
 )
 
-# --- session name / herdr ----------------------------------------------------
+# --- session name ------------------------------------------------------------
 case(
     "session_name short",
     {"session_name": "abc", "model": {"display_name": "M"}, "workspace": {"current_dir": "/tmp"}},
@@ -209,58 +192,50 @@ for cost in (0, 0.001, 0.005, 1.005, 5.72, 12.5, 1234.567):
         },
     )
 
-# --- malformed ---------------------------------------------------------------
-RAW_CASES = [
-    ("raw: garbage", "xx"),
-    ("raw: empty", ""),
-    ("raw: null", "null"),
-    ("raw: array", "[1,2,3]"),
-    ("raw: number", "42"),
-    ("raw: truncated", '{"model":'),
+# --- config ------------------------------------------------------------------
+# Written to a scratch HOME by the runner, so themes and segment lists are
+# covered rather than only the defaults.
+CONFIG_CASES = [
+    ("theme catppuccin", {"theme": "catppuccin"}),
+    ("theme tokyo-night", {"theme": "tokyo-night"}),
+    ("theme gruvbox", {"theme": "gruvbox"}),
+    ("theme dracula", {"theme": "dracula"}),
+    ("theme one-dark", {"theme": "one-dark"}),
+    ("segments trimmed", {"line1": ["model", "location"], "line2": ["cost"]}),
+    ("segments reordered", {"line1": ["location", "pr", "session"], "line2": ["cost", "context"]}),
+    ("split limits", {"line2": ["limit_7d", "context", "limit_5h"]}),
+    ("narrow bars", {"bar_width": 4, "limit_bar_width": 2}),
+    ("gap blank", {"gap": "blank"}),
+    ("gap none, no bottom spacing", {"gap": "none", "bottom_spacing": 0}),
+    ("gap scaled and rechar", {"gap_char": "-", "gap_scale": 0.5}),
+    ("colour overrides", {"colors": {"brightest": "#ff00ff", "dim": [10, 20, 30]}}),
+    ("short session width", {"session_name_width": 6}),
+    ("forced truecolor off", {"truecolor": False}),
+    ("garbage values ignored", {"theme": "nope", "bar_width": 0, "gap": "weird", "gap_scale": 9}),
 ]
 
+CONFIG_PAYLOAD = {
+    "session_name": "promo-combine",
+    "model": {"display_name": "Opus 5 (1M context)"},
+    "workspace": {"current_dir": "/tmp"},
+    "context_window": {
+        "used_percentage": 42,
+        "total_input_tokens": 424000,
+        "context_window_size": 1000000,
+    },
+    "cost": {"total_cost_usd": 5.72},
+    "effort": {"level": "high"},
+    "pr": {"number": 265, "review_state": "approved"},
+    "rate_limits": {
+        "five_hour": {"used_percentage": 38, "resets_at": FIXED_NOW + 8400},
+        "seven_day": {"used_percentage": 61, "resets_at": FIXED_NOW + 437400},
+    },
+}
 
-def run(cmd, raw, env):
-    full = dict(os.environ)
-    full.pop("HERDR_WORKSPACE_ID", None)
-    full.update(env)
-    return subprocess.run(cmd, input=raw.encode(), capture_output=True, env=full).stdout
-
-
-def main():
-    impls = [("python", [PY])]
-    if os.path.exists(RS):
-        impls.append(("rust", [RS]))
-    else:
-        print("  skipping rust, build it with: cd rust && cargo build --release")
-
-    if len(impls) < 2:
-        print("only one implementation available, nothing to compare")
-        return 0
-
-    failures = []
-    total = 0
-
-    work = [(n, json.dumps(p), e) for n, p, e in cases]
-    work += [(n, raw, {}) for n, raw in RAW_CASES]
-
-    for name, raw, env in work:
-        outputs = [(label, run(cmd, raw, env)) for label, cmd in impls]
-        total += 1
-        base_label, base = outputs[0]
-        for label, out in outputs[1:]:
-            if out != base:
-                failures.append((f"{name}  [{base_label} vs {label}]", base, out))
-                break
-
-    mode = "24-bit" if os.environ.get("COLORTERM") in ("truecolor", "24bit") else "256-colour"
-    names = ", ".join(label for label, _ in impls)
-    print(f"{total - len(failures)}/{total} identical  ({names}, {mode})")
-    for name, a, b in failures[:10]:
-        print(f"\n  MISMATCH: {name}\n    {a!r}\n    {b!r}")
-    if len(failures) > 10:
-        print(f"\n  ... and {len(failures) - 10} more")
-    return 1 if failures else 0
-
-
-sys.exit(main())
+# --- malformed ---------------------------------------------------------------
+raw_case("raw: garbage", "xx")
+raw_case("raw: empty", "")
+raw_case("raw: null", "null")
+raw_case("raw: array", "[1,2,3]")
+raw_case("raw: number", "42")
+raw_case("raw: truncated", '{"model":')

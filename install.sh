@@ -1,13 +1,12 @@
 #!/bin/sh
 # Installs the Claude Code status line.
 #
-#   ./install.sh            download the prebuilt binary, else build, else Python
+#   ./install.sh            download the prebuilt binary, else build from source
 #   ./install.sh binary     download the released universal binary (needs gh)
 #   ./install.sh rust       build from source (needs cargo)
-#   ./install.sh python     no toolchain at all
 #
 # Nothing here installs a toolchain for you. If cargo is missing the installer
-# picks another path rather than fetching Rust behind your back.
+# says so rather than fetching Rust behind your back.
 #
 # Writes the statusLine block into ~/.claude/settings.json and leaves every
 # other setting untouched.
@@ -48,19 +47,19 @@ case "$choice" in
       fi
       choice=rust
     else
-      if command -v gh >/dev/null 2>&1; then
-        echo "gh cannot read $REPO, and cargo is not installed."
-      fi
-      choice=python
+      echo "Need either gh with access to $REPO, or cargo to build from source." >&2
+      echo "Install gh:    brew install gh && gh auth login" >&2
+      echo "Install Rust:  https://rustup.rs" >&2
+      exit 1
     fi
     ;;
-  binary|python|rust) ;;
-  *) echo "usage: $0 [binary|rust|python]" >&2; exit 1 ;;
+  binary|rust) ;;
+  *) echo "usage: $0 [binary|rust]" >&2; exit 1 ;;
 esac
 
 if [ "$choice" = binary ]; then
   command -v gh >/dev/null 2>&1 || {
-    echo "gh not found. Install it, or run: $0 python" >&2
+    echo "gh not found. Install it, or run: $0 rust" >&2
     exit 1
   }
   DEST="$ROOT/bin"
@@ -76,17 +75,14 @@ if [ "$choice" = binary ]; then
   fi
   chmod +x "$DEST/statusline"
   COMMAND="$DEST/statusline"
-elif [ "$choice" = rust ]; then
+else
   command -v cargo >/dev/null 2>&1 || {
-    echo "cargo not found. Install Rust from https://rustup.rs, or run: $0 python" >&2
+    echo "cargo not found. Install Rust from https://rustup.rs, or run: $0 binary" >&2
     exit 1
   }
   echo "Building from source. About twenty seconds the first time."
   ( cd "$ROOT/rust" && cargo build --release --quiet )
   COMMAND="$ROOT/rust/target/release/statusline"
-else
-  chmod +x "$ROOT/scripts/statusline.py"
-  COMMAND="$ROOT/scripts/statusline.py"
 fi
 
 # Merge rather than overwrite: this file holds hooks, model and permissions too.

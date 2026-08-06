@@ -32,46 +32,41 @@ It applies on your next interaction. No restart.
 The installer merges into `~/.claude/settings.json`, so your hooks, model and
 permissions are left alone. **Nothing here installs a toolchain for you.**
 
-## Which version
+## Two ways in
 
-Three ways in, same output from all of them. `install.sh` picks the first that
-works, or you can name one.
+Same binary either way. `install.sh` downloads it if it can, builds it if not.
 
-| | needs | CPU per render |
-|---|---|---|
-| `./install.sh binary` | `gh`, and repo access | **2.3 ms** |
-| `./install.sh rust` | cargo, about 1.5 GB of toolchain | **2.3 ms** |
-| `./install.sh python` | nothing | 107 ms |
+| | needs |
+|---|---|
+| `./install.sh binary` | `gh`, and access to this repo |
+| `./install.sh rust` | cargo, about 1.5 GB of toolchain |
 
-The released binary is universal, so it runs on Apple Silicon and Intel, and it
-ships with a SHA-256 that the installer checks before putting it in place.
+The release is a universal binary, so it runs on Apple Silicon and Intel, and it
+ships with a SHA-256 that the installer verifies before putting it in place.
+macOS only. On Linux, build from source.
 
-### Is the speed worth caring about
+## Speed
 
 Measured on an M-series Mac against the eleven-line bash example from the Claude
-Code docs, extended with a token count, so that both show comparable
-information. CPU time per render, median of repeated runs:
+Code docs, extended with a token count so both show comparable information.
+CPU time per render, median of repeated runs:
 
 | | CPU per render |
 |---|---|
 | docs example (bash + 4 jq) | ~98 ms |
-| this, python | ~107 ms |
-| this, rust | **~2.3 ms** |
+| this | **~2.3 ms** |
 
-So the Rust build is **40x cheaper**, and the Python build is not faster than
-the docs example at all. Be honest with yourself about which you are installing.
+About **40x cheaper**. The reason is process count: each `jq` in a shell status
+line is another process, so cost grows as you add fields. This parses the
+payload once, so it does not.
 
-The reason is process count. Each `jq` in a shell status line is another
-process, so cost grows as you add fields. This parses the payload once, so it
-does not.
-
-None of this is perceptible at one session. The status line re-runs on every
+None of that is perceptible at one session. The status line re-runs on every
 event, debounced at 300 ms, so it only compounds when several Claude Code
 sessions are working at once. At ten concurrent sessions it is the difference
-between 10% and 80% of a CPU core.
+between roughly 10% and 80% of a CPU core.
 
-Install Python if you want the features. Install the binary if you also want the
-speed. Both take one command.
+If you only want a status line and do not care about this, the docs example is
+eleven lines of bash and will serve you fine.
 
 ## What it reads
 
@@ -81,7 +76,8 @@ speed. Both take one command.
 - `~/.config/herdr/session.json`, only if `$HERDR_WORKSPACE_ID` is set
 
 It writes to stdout and nothing else. No network, no subprocesses, no
-credentials.
+credentials. Roughly 900 lines of dependency-free Rust, so reading it before you
+run it is realistic.
 
 ## herdr is optional
 
@@ -195,17 +191,33 @@ once.
 ## After changing output
 
 ```sh
-python3 scripts/parity.py                    # 256-colour path
-COLORTERM=truecolor python3 scripts/parity.py  # 24-bit path
+cd rust && cargo build --release && cd ..
+python3 scripts/golden.py
 ```
 
-161 cases: every whole percent through the meters, token and duration
-boundaries, all PR states, worktrees, missing and malformed input. It compares
-raw bytes across whichever implementations are present.
+352 recorded cases in `tests/golden.txt`, compared byte for byte. Every whole
+percent through the meters, token and duration boundaries, all PR states,
+worktrees, every theme, config permutations, missing and malformed input, under
+both 24-bit and 256-colour.
 
-This is worth running. It caught a currency bug that only appeared at
+Time is pinned with `$STATUSLINE_NOW` and `$HOME` is redirected to a scratch
+directory, so the same input produces the same bytes on any machine at any time
+of day.
+
+If a change is intended, re-record it and read the diff before committing:
+
+```sh
+python3 scripts/golden.py --update
+git diff tests/golden.txt
+```
+
+This is worth running. The case list caught a currency bug that only appeared at
 `$0.005`, where scaling by 100 before rounding lands on exactly `0.5` in
 floating point and loses the tie-break.
+
+The expectations were originally recorded from a separate Python implementation
+that has since been removed, so they pin reviewed behaviour rather than
+whatever the current code happens to do.
 
 ## Notes
 
