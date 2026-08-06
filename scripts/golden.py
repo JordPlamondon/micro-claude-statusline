@@ -24,6 +24,7 @@ from cases import (  # noqa: E402
     CONFIG_CASES,
     CONFIG_PAYLOAD,
     FIXED_NOW,
+    WIDE_PAYLOAD,
     WIDTH_CASES,
 )
 
@@ -99,11 +100,15 @@ def collect(binary, workdir):
             results.append((f"{depth} | config | {name}", out))
 
         # Narrow terminals, where segments are shed rather than the row wrapping.
-        for cols in WIDTH_CASES:
-            env = dict(env_depth)
-            env["COLUMNS"] = str(cols)
-            out = run(binary, json.dumps(CONFIG_PAYLOAD), env, plain_home)
-            results.append((f"{depth} | width {cols} | shedding", out))
+        # Twice: once in ASCII, once with a session name whose characters are
+        # two columns wide, since counting those as one column was the whole
+        # bug and only the second sweep can catch it coming back.
+        for label, payload in (("", CONFIG_PAYLOAD), (" wide", WIDE_PAYLOAD)):
+            for cols in WIDTH_CASES:
+                env = dict(env_depth)
+                env["COLUMNS"] = str(cols)
+                out = run(binary, json.dumps(payload), env, plain_home)
+                results.append((f"{depth} | width {cols}{label} | shedding", out))
 
     return results
 

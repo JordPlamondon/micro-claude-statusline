@@ -165,6 +165,48 @@ impl<'a> Ctx<'a> {
     }
 }
 
+/// Terminal columns one character occupies.
+///
+/// East Asian Wide and Fullwidth characters take two cells. Counting them as
+/// one made a row of CJK, kana, Hangul or emoji measure far narrower than it
+/// renders, so shedding concluded a row fitted when it did not and the row
+/// wrapped: the exact failure responsive mode exists to prevent.
+///
+/// This is the practical subset of UAX #11 rather than the whole property,
+/// which runs to a few hundred ranges and needs regenerating with every
+/// Unicode release. These cover the scripts and emoji anyone realistically has
+/// in a directory or session name. A few narrow symbols inside the emoji
+/// blocks are counted as wide, which is the safe direction to be wrong in:
+/// overestimating sheds one segment too eagerly, underestimating wraps the row.
+fn char_width(c: char) -> usize {
+    const WIDE: [(u32, u32); 18] = [
+        (0x1100, 0x115F),   // Hangul Jamo, initial consonants
+        (0x2E80, 0x303E),   // CJK radicals, Kangxi, CJK symbols and punctuation
+        (0x3041, 0x33FF),   // kana, Bopomofo, Hangul compatibility, CJK compat
+        (0x3400, 0x4DBF),   // CJK unified ideographs extension A
+        (0x4E00, 0x9FFF),   // CJK unified ideographs
+        (0xA000, 0xA4CF),   // Yi
+        (0xA960, 0xA97F),   // Hangul Jamo extended-A
+        (0xAC00, 0xD7A3),   // Hangul syllables
+        (0xF900, 0xFAFF),   // CJK compatibility ideographs
+        (0xFE10, 0xFE19),   // vertical forms
+        (0xFE30, 0xFE6F),   // CJK compatibility forms
+        (0xFF00, 0xFF60),   // fullwidth forms
+        (0xFFE0, 0xFFE6),   // fullwidth signs
+        (0x1F300, 0x1F64F), // pictographs and emoticons
+        (0x1F680, 0x1F6FF), // transport and map symbols
+        (0x1F900, 0x1F9FF), // supplemental symbols and pictographs
+        (0x1FA70, 0x1FAFF), // symbols and pictographs extended-A
+        (0x20000, 0x3FFFD), // CJK unified ideographs extension B onwards
+    ];
+    let n = c as u32;
+    if WIDE.iter().any(|(lo, hi)| n >= *lo && n <= *hi) {
+        2
+    } else {
+        1
+    }
+}
+
 /// Visible column count, ignoring ANSI colour escapes.
 fn display_width(text: &str) -> usize {
     let mut n = 0usize;
@@ -177,7 +219,7 @@ fn display_width(text: &str) -> usize {
                 }
             }
         } else {
-            n += 1;
+            n += char_width(ch);
         }
     }
     n

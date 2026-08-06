@@ -265,6 +265,37 @@ for name, payload in [
 ]:
     case(name, payload)
 
+# --- wide characters ----------------------------------------------------------
+# East Asian Wide and Fullwidth characters occupy two terminal columns. Counted
+# as one, a row measured far narrower than it rendered, so shedding decided it
+# fitted and the row wrapped anyway. These pin the column arithmetic; the
+# shedding consequence is covered by WIDE_PAYLOAD against WIDTH_CASES below.
+for name, payload in [
+    ("cjk session name", {"session_name": "日本語のセッション",
+                          "model": {"display_name": "M"},
+                          "workspace": {"current_dir": "/tmp"}}),
+    ("hangul session name", {"session_name": "한국어세션이름",
+                             "model": {"display_name": "M"},
+                             "workspace": {"current_dir": "/tmp"}}),
+    ("emoji session name", {"session_name": "ship 🚀 it 🎉",
+                            "model": {"display_name": "M"},
+                            "workspace": {"current_dir": "/tmp"}}),
+    ("fullwidth forms", {"session_name": "ＦＵＬＬＷＩＤＴＨ",
+                         "model": {"display_name": "M"},
+                         "workspace": {"current_dir": "/tmp"}}),
+    ("cjk directory", {"model": {"display_name": "M"},
+                       "workspace": {"current_dir": "/tmp/プロジェクト"}}),
+    # Mixed, and with a second row, so the gap rule width is pinned too.
+    ("wide with both rows", {"session_name": "日本語 mixed 名前",
+                             "model": {"display_name": "Opus 5"},
+                             "workspace": {"current_dir": "/tmp"},
+                             "context_window": {"used_percentage": 42,
+                                                "total_input_tokens": 424000,
+                                                "context_window_size": 1000000},
+                             "cost": {"total_cost_usd": 5.72}}),
+]:
+    case(name, payload)
+
 # --- malformed ---------------------------------------------------------------
 raw_case("raw: garbage", "xx")
 raw_case("raw: empty", "")
@@ -278,3 +309,8 @@ raw_case("raw: truncated", '{"model":')
 # 200 fits everything; 30 is below what the protected segments need, so it
 # records the overflow rather than pretending it does not happen.
 WIDTH_CASES = [200, 120, 100, 90, 80, 70, 60, 50, 40, 30]
+
+# The same sweep with a session name that is twice as wide as it is long. Run
+# against CONFIG_PAYLOAD's arithmetic this is where undercounting showed:
+# every one of these widths believed the row fitted and let it wrap.
+WIDE_PAYLOAD = dict(CONFIG_PAYLOAD, session_name="日本語のセッション名前")
