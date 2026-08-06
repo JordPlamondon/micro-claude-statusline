@@ -144,24 +144,30 @@ const ONE_DARK: Palette = Palette {
     notice: (0xD1, 0x9A, 0x66),
 };
 
-pub const NAMES: [&str; 6] = [
-    "nord",
-    "catppuccin",
-    "tokyo-night",
-    "gruvbox",
-    "dracula",
-    "one-dark",
+/// Every theme, in the order `--themes` and `--preview` list them.
+///
+/// The one place a name is bound to a palette. The list and the lookup used to
+/// be separate, so adding a theme meant editing both, and disagreeing between
+/// them failed quietly: `--themes` would offer a name that the lookup resolved
+/// to nord, and the user would pick it and see the wrong colours.
+pub const THEMES: [(&str, Palette); 6] = [
+    ("nord", NORD),
+    ("catppuccin", CATPPUCCIN),
+    ("tokyo-night", TOKYO_NIGHT),
+    ("gruvbox", GRUVBOX),
+    ("dracula", DRACULA),
+    ("one-dark", ONE_DARK),
 ];
+
+pub fn names() -> impl Iterator<Item = &'static str> {
+    THEMES.iter().map(|(name, _)| *name)
+}
 
 /// Unknown names fall back to nord rather than failing, so a typo in the config
 /// costs a colour scheme instead of the whole status line.
 pub fn by_name(name: &str) -> Palette {
-    match name {
-        "catppuccin" => CATPPUCCIN,
-        "tokyo-night" => TOKYO_NIGHT,
-        "gruvbox" => GRUVBOX,
-        "dracula" => DRACULA,
-        "one-dark" => ONE_DARK,
-        _ => NORD,
-    }
+    THEMES
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map_or(NORD, |(_, palette)| *palette)
 }

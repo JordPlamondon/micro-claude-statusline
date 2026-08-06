@@ -710,16 +710,16 @@ fn preview(requested: Option<&str>, preset: Option<&str>) -> i32 {
     let mut out = String::new();
     match requested {
         Some(name) => {
-            if !theme::NAMES.contains(&name) {
+            if !theme::names().any(|n| n == name) {
                 eprintln!("unknown theme: {name}");
-                eprintln!("try one of: {}", theme::NAMES.join(", "));
+                eprintln!("try one of: {}", theme::names().collect::<Vec<_>>().join(", "));
                 return 1;
             }
             preview_one(name, &data, preset, &mut out);
         }
         None => {
             out.push_str("sample data, not your session\n\n");
-            for name in theme::NAMES {
+            for name in theme::names() {
                 preview_one(name, &data, preset, &mut out);
             }
         }

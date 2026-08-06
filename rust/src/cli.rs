@@ -100,7 +100,7 @@ pub fn init(force: bool) -> i32 {
 }
 
 pub fn themes() {
-    for name in theme::NAMES {
+    for name in theme::names() {
         println!("{name}");
     }
 }
