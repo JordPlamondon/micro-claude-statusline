@@ -13,6 +13,13 @@ Builds both Apple targets as separate binaries, writes checksums, smoke tests
 the native one and uploads all three. Needs `rustup target add
 x86_64-apple-darwin` once.
 
+Both this and `install.sh rust` source `scripts/rustflags.sh`, which is what
+makes the output reproducible: build the same source anywhere and you get the
+same bytes, so a release can be checked against the source it claims to come
+from. Keep them sourcing it. A release built with a bare `cargo build` will
+still work and still be correct, it just quietly stops being checkable, which
+is the sort of thing nobody notices for months.
+
 Deliberately not a universal binary. On Apple Silicon, exec-ing a fat binary
 containing an x86_64 slice costs around 20 ms every time, roughly ten times this
 program's entire runtime. Measured: thin arm64 2.4 ms, fat arm64-only 2.4 ms,

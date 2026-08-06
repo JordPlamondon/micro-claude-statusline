@@ -174,6 +174,11 @@ else
     exit 1
   }
   echo "Building from source. About twenty seconds the first time."
+  # Same flags the releases are built with, so what you build here is byte for
+  # byte what is published. That is what makes checking one against the other
+  # mean anything.
+  CRATE_DIR="$ROOT/rust"
+  . "$ROOT/scripts/rustflags.sh"
   ( cd "$ROOT/rust" && cargo build --release --quiet )
   BUILT="$ROOT/rust/target/release/statusline"
 fi

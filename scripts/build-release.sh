@@ -25,6 +25,10 @@ for target in "$ARM" "$INTEL"; do
   }
 done
 
+# Reproducible, so anyone can rebuild these assets and get the same bytes.
+CRATE_DIR="$ROOT/rust"
+. "$ROOT/scripts/rustflags.sh"
+
 echo "Building $ARM"
 ( cd "$ROOT/rust" && cargo build --release --quiet --target "$ARM" )
 echo "Building $INTEL"
