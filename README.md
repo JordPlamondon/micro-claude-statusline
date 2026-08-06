@@ -102,7 +102,7 @@ fatal, so a stray comma costs you a setting and not the whole bar.
 
 ```json
 {
-  "theme": "catppuccin",
+  "theme": "nord",
   "line1": ["session", "model", "location", "pr", "modes"],
   "line2": ["context", "limits", "cost"],
   "bar_width": 16,
@@ -115,7 +115,14 @@ fatal, so a stray comma costs you a setting and not the whole bar.
 }
 ```
 
-The values above are the defaults, so an empty `{}` behaves the same as no file.
+Those are the defaults, so an empty `{}` behaves the same as no file. `--init`
+writes exactly this, with each key commented, which is easier than copying it
+from here:
+
+```sh
+statusline --init            # refuses to overwrite an existing config
+statusline --init --force    # overwrite it anyway
+```
 
 **Segments** are named, and the arrays control both what appears and in what
 order. Drop one by leaving it out, move it to the other row, or reorder freely.
@@ -161,12 +168,12 @@ changing those changes the meters too.
 
 **`truecolor`** forces 24-bit on or off. Omit it to detect from `COLORTERM`.
 
-Try a theme before committing to it:
+Try a theme before committing to it. Sample data, so it looks the same for
+everyone:
 
 ```sh
-statusline --preview            all six, with sample data
+statusline --preview            all six, stacked
 statusline --preview gruvbox    just that one
-statusline --init               write a commented config with every default
 ```
 
 Rebuild after editing the Rust source:
@@ -229,3 +236,14 @@ several sessions are open.
 Negative `padding` in `settings.json` shifts the bar left but the renderer does
 not account for it, so the leftmost character is clipped until a keystroke
 forces a repaint. Leave it at 0.
+
+A custom status line suppresses two of Claude Code's own footer hints, `? for
+shortcuts` and `hold space to speak`. Contextual hints such as `esc to
+interrupt` stay.
+
+The open-PR badge in Claude Code's footer shows the same PR as the `pr` segment
+here. This adds the review state icon; if you would rather not have it twice,
+drop `pr` from `line1`.
+
+`$STATUSLINE_NOW` pins the clock. It exists for the tests, and setting it in
+normal use will freeze the rate-limit countdowns.
