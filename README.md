@@ -31,28 +31,34 @@ cd claude-statusline
 ./install.sh
 ```
 
+**That is the whole install. No toolchain, nothing to compile.** It downloads a
+prebuilt binary, which is 809 KB and the only thing left on your machine
+afterwards.
+
 It applies on your next interaction. No restart.
 
 The installer merges into `~/.claude/settings.json`, so your hooks, model and
-permissions are left alone. **Nothing here installs a toolchain for you.**
-
-The binary is copied to `~/.claude/bin/statusline`, so **you can delete this
-checkout afterwards**. It is also symlinked into `~/.local/bin` when that is on
-your PATH, which is what makes the `statusline` command below work.
+permissions are left alone. The binary is copied to `~/.claude/bin/statusline`,
+so **you can delete this checkout straight after**. It is also symlinked into
+`~/.local/bin` when that is on your PATH, which is what makes the `statusline`
+command work.
 
 To update later, clone again and re-run `./install.sh`.
 
-## Two ways in
+The release is a universal binary, so it runs on Apple Silicon and Intel. macOS
+only.
 
-Same binary either way. `install.sh` downloads it if it can, builds it if not.
+### Building it yourself instead
 
-| | needs |
-|---|---|
-| `./install.sh binary` | `gh`, and access to this repo |
-| `./install.sh rust` | cargo, about 1.5 GB of toolchain |
+Optional, and only worth it if you would rather compile the source than trust a
+binary someone else built, or you are on Linux.
 
-The release is a universal binary, so it runs on Apple Silicon and Intel.
-macOS only. On Linux, build from source.
+```sh
+./install.sh rust
+```
+
+That needs `cargo`, which means a Rust toolchain at roughly 1.5 GB. Everyone
+else should ignore this and use the command above.
 
 The installer verifies a SHA-256 before making the binary executable, and
 refuses to continue if the checksum is missing or does not match. Worth being

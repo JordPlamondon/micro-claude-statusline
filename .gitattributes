@@ -1,0 +1,8 @@
+# The Python here is the golden-file test harness, not part of what ships.
+# Without this GitHub reports the repo as part Python, which misrepresents a
+# project whose entire deliverable is one Rust binary.
+scripts/*.py linguist-detectable=false
+
+# Recorded expected output, not source. Large, and diffing it by hand is the
+# point rather than reading it.
+tests/golden.txt linguist-generated=true
