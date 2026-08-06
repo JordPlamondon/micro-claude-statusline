@@ -20,6 +20,12 @@ pub struct Config {
     pub bottom_spacing: usize,
     /// None means auto-detect from COLORTERM.
     pub truecolor: Option<bool>,
+    /// Drop lower-priority segments rather than let a row wrap. 0 disables.
+    /// Otherwise the width comes from $COLUMNS, which Claude Code sets.
+    pub responsive: bool,
+    /// Order segments are shed in when the row will not fit. First to go, first
+    /// in the list. Anything absent here is kept.
+    pub drop_order: Vec<String>,
     /// Internal, never read from JSON. Preview turns it off so a sample bar
     /// shows the sample's session name rather than the caller's real workspace.
     pub use_herdr: bool,
@@ -45,6 +51,14 @@ impl Default for Config {
             gap_scale: 1.0,
             bottom_spacing: 1,
             truecolor: None,
+            responsive: true,
+            // Cost and model go first: cost is glanceable elsewhere and the
+            // model is identical in every session. Context and location are
+            // the last things worth losing.
+            drop_order: ["cost", "modes", "model", "pr", "limits", "session"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             use_herdr: true,
         }
     }
@@ -178,6 +192,12 @@ pub fn load() -> Config {
     match v.path("truecolor") {
         Some(Value::Bool(b)) => cfg.truecolor = Some(*b),
         _ => {}
+    }
+    if let Some(Value::Bool(b)) = v.path("responsive") {
+        cfg.responsive = *b;
+    }
+    if v.path("drop_order").and_then(Value::as_arr).is_some() {
+        cfg.drop_order = segments_at(&v, "drop_order", cfg.drop_order.clone());
     }
 
     cfg

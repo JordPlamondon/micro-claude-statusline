@@ -21,7 +21,11 @@ Meters use a positional gradient and eighth-width block characters, so the fill
 is accurate to an eighth of a column rather than rounding to whole cells.
 
 Every segment disappears when its data is absent, so early in a session you get
-just the model and directory rather than a row of zeroes.
+just the model and directory rather than a row of zeroes. On a narrow terminal
+it sheds lower-priority segments rather than letting the row wrap.
+
+**Zero dependencies, no network calls, no credentials. It reads stdin and prints
+a line.**
 
 ## Install
 
@@ -111,7 +115,12 @@ eleven lines of bash and will serve you fine.
 
 It writes to stdout and nothing else. No network, no subprocesses, no
 credentials, no `unsafe`, and no third-party crates: `Cargo.lock` contains only
-this package. Roughly 900 lines, so reading it before you run it is realistic.
+this package. Around 1,400 lines, so reading it before you run it is realistic.
+
+Worth stating because some status lines fetch quota from an API and therefore
+need a token in your keychain. This one does not: the 5h and 7d rate limits
+arrive in the stdin payload already, so there is nothing to authenticate and
+nothing to leak.
 
 Input is treated as untrusted. JSON nesting is capped at 64 levels so a
 pathological payload cannot overflow the stack, and every config dimension is
@@ -209,6 +218,23 @@ changing those changes the meters too.
 
 **`truecolor`** forces 24-bit on or off. Omit it to detect from `COLORTERM`.
 
+**`responsive`** is on by default. When a row would be wider than the terminal,
+segments are shed one at a time until it fits, in `drop_order`:
+
+```json
+{ "responsive": true, "drop_order": ["cost", "modes", "model", "pr", "limits", "session"] }
+```
+
+Cost goes first because it is glanceable elsewhere, then the model because it is
+identical in every session. Anything not listed is never shed, which is why
+`context` and `location` survive to the end. Set `"responsive": false` to keep
+every segment and accept the wrapping.
+
+Width comes from `$COLUMNS`, which Claude Code sets before running the command.
+Claude Code captures stdout rather than attaching it to a terminal, so nothing
+inside the program can measure the width itself. Needs Claude Code v2.1.153 or
+later; without it, nothing is shed.
+
 Try a theme before committing to it. Sample data, so it looks the same for
 everyone:
 
@@ -246,14 +272,14 @@ cd rust && cargo build --release && cd ..
 python3 scripts/golden.py
 ```
 
-352 recorded cases in `tests/golden.txt`, compared byte for byte. Every whole
+372 recorded cases in `tests/golden.txt`, compared byte for byte. Every whole
 percent through the meters, token and duration boundaries, all PR states,
-worktrees, every theme, config permutations, missing and malformed input, under
-both 24-bit and 256-colour.
+worktrees, every theme, config permutations, ten terminal widths, and missing
+or malformed input, under both 24-bit and 256-colour.
 
-Time is pinned with `$STATUSLINE_TEST_PINNED_CLOCK` and `$HOME` is redirected to a scratch
-directory, so the same input produces the same bytes on any machine at any time
-of day.
+Time is pinned with `$STATUSLINE_TEST_PINNED_CLOCK`, `$COLUMNS` is pinned, and
+`$HOME` is redirected to a scratch directory, so the same input produces the
+same bytes on any machine at any time of day.
 
 If a change is intended, re-record it and read the diff before committing:
 

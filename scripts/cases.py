@@ -239,3 +239,9 @@ raw_case("raw: null", "null")
 raw_case("raw: array", "[1,2,3]")
 raw_case("raw: number", "42")
 raw_case("raw: truncated", '{"model":')
+
+# --- responsive ---------------------------------------------------------------
+# Widths the row is rendered at, to pin which segments get shed and when.
+# 200 fits everything; 30 is below what the protected segments need, so it
+# records the overflow rather than pretending it does not happen.
+WIDTH_CASES = [200, 120, 100, 90, 80, 70, 60, 50, 40, 30]

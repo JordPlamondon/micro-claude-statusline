@@ -19,7 +19,13 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cases import CASES, CONFIG_CASES, CONFIG_PAYLOAD, FIXED_NOW  # noqa: E402
+from cases import (  # noqa: E402
+    CASES,
+    CONFIG_CASES,
+    CONFIG_PAYLOAD,
+    FIXED_NOW,
+    WIDTH_CASES,
+)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GOLDEN = os.path.join(ROOT, "tests", "golden.txt")
@@ -57,6 +63,10 @@ def run(binary, stdin, env, home):
     full.pop("HERDR_WORKSPACE_ID", None)
     full["HOME"] = home
     full["STATUSLINE_TEST_PINNED_CLOCK"] = str(FIXED_NOW)
+    # Pinned, not inherited: some shells export COLUMNS, which would make every
+    # recorded case depend on the width of whatever terminal ran the test.
+    # Wide enough that nothing sheds unless a case sets it deliberately.
+    full["COLUMNS"] = "999"
     full.update(env)
     cmd = binary if isinstance(binary, list) else [binary]
     return subprocess.run(
@@ -87,6 +97,13 @@ def collect(binary, workdir):
                 json.dump(cfg, fh)
             out = run(binary, json.dumps(CONFIG_PAYLOAD), dict(env_depth), cfg_home)
             results.append((f"{depth} | config | {name}", out))
+
+        # Narrow terminals, where segments are shed rather than the row wrapping.
+        for cols in WIDTH_CASES:
+            env = dict(env_depth)
+            env["COLUMNS"] = str(cols)
+            out = run(binary, json.dumps(CONFIG_PAYLOAD), env, plain_home)
+            results.append((f"{depth} | width {cols} | shedding", out))
 
     return results
 

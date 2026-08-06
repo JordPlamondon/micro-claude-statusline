@@ -482,14 +482,53 @@ fn segment(name: &str, ctx: &Ctx, data: &Value) -> Option<String> {
     }
 }
 
-fn build_line(names: &[String], ctx: &Ctx, data: &Value) -> String {
-    let parts: Vec<String> = names
-        .iter()
-        .filter_map(|n| segment(n, ctx, data))
-        .filter(|s| !s.is_empty())
-        .collect();
+/// Terminal width, from $COLUMNS.
+///
+/// Claude Code captures stdout rather than attaching it to the terminal, so
+/// ioctl and `tput cols` see nothing from in here. It sets COLUMNS and LINES
+/// before running the command instead. Requires Claude Code v2.1.153.
+fn terminal_width() -> Option<usize> {
+    std::env::var("COLUMNS")
+        .ok()?
+        .trim()
+        .parse::<usize>()
+        .ok()
+        .filter(|w| *w > 0)
+}
+
+fn joined(parts: &[(String, String)], ctx: &Ctx) -> String {
     let sep = format!(" {}│{} ", ctx.fg(ctx.cfg.palette.separator), RESET);
-    parts.join(&sep)
+    parts
+        .iter()
+        .map(|(_, rendered)| rendered.as_str())
+        .collect::<Vec<_>>()
+        .join(&sep)
+}
+
+/// Builds a row, shedding segments in `drop_order` while it overflows.
+///
+/// Without this a long branch name or a narrow split pane wraps the row, which
+/// costs a line of conversation and looks broken. Segments not named in
+/// drop_order are never shed, so the row degrades to something still useful
+/// rather than to nothing.
+fn build_line(names: &[String], ctx: &Ctx, data: &Value, budget: Option<usize>) -> String {
+    let mut parts: Vec<(String, String)> = names
+        .iter()
+        .filter_map(|n| segment(n, ctx, data).map(|s| (n.clone(), s)))
+        .filter(|(_, s)| !s.is_empty())
+        .collect();
+
+    let Some(budget) = budget else {
+        return joined(&parts, ctx);
+    };
+
+    for candidate in &ctx.cfg.drop_order {
+        if display_width(&joined(&parts, ctx)) <= budget {
+            break;
+        }
+        parts.retain(|(name, _)| name != candidate);
+    }
+    joined(&parts, ctx)
 }
 
 fn detect_truecolor(cfg: &Config) -> bool {
@@ -508,9 +547,11 @@ fn render(cfg: &Config, data: &Value) -> Option<String> {
         cfg,
     };
 
+    let budget = if cfg.responsive { terminal_width() } else { None };
+
     let lines: Vec<String> = [
-        build_line(&cfg.line1, &ctx, data),
-        build_line(&cfg.line2, &ctx, data),
+        build_line(&cfg.line1, &ctx, data, budget),
+        build_line(&cfg.line2, &ctx, data, budget),
     ]
     .into_iter()
     .filter(|l| !l.is_empty())
