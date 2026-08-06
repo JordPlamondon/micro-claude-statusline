@@ -45,8 +45,14 @@ command work.
 
 To update later, clone again and re-run `./install.sh`.
 
-The release is a universal binary, so it runs on Apple Silicon and Intel. macOS
+There is a binary per architecture and the installer picks the right one. macOS
 only.
+
+Deliberately not a universal binary: on Apple Silicon, exec-ing a fat binary
+that contains an x86_64 slice costs about 20 ms every time, roughly ten times
+this program's entire runtime. Measured here as 2.4 ms for a thin arm64 binary,
+2.4 ms for a fat one containing only arm64, and 22.1 ms once the Intel slice is
+added. The fat header is free; the Intel slice is not.
 
 ### Building it yourself instead
 
@@ -75,8 +81,8 @@ CPU time per render, median of repeated runs:
 
 | | CPU per render |
 |---|---|
-| docs example (bash + 4 jq) | ~98 ms |
-| this | **~2.3 ms** |
+| docs example (bash + 4 jq) | ~110 ms |
+| this | **~2.5 ms** |
 
 About **40x cheaper**. The reason is process count: each `jq` in a shell status
 line is another process, so cost grows as you add fields. This parses the
@@ -84,8 +90,14 @@ payload once, so it does not.
 
 None of that is perceptible at one session. The status line re-runs on every
 event, debounced at 300 ms, so it only compounds when several Claude Code
-sessions are working at once. At ten concurrent sessions it is the difference
-between roughly 10% and 80% of a CPU core.
+sessions are working at once. Taking that ceiling as the worst case, and
+counting a whole CPU core as 100%:
+
+| sessions working at once | docs example | this |
+|---|---|---|
+| 1 | 43% of a core | 1% |
+| 5 | 215% | 5% |
+| 10 | 430% | 10% |
 
 If you only want a status line and do not care about this, the docs example is
 eleven lines of bash and will serve you fine.

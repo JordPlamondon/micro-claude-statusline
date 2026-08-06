@@ -63,11 +63,20 @@ if [ "$choice" = binary ]; then
     echo "gh not found. Install it, or run: $0 rust" >&2
     exit 1
   }
+  # One binary per architecture rather than a universal one: on Apple Silicon a
+  # fat binary containing an x86_64 slice costs about 20 ms per exec, ten times
+  # this program's entire runtime.
+  case "$(uname -m)" in
+    arm64|aarch64) ASSET="statusline-arm64" ;;
+    x86_64)        ASSET="statusline-x86_64" ;;
+    *) echo "Unsupported architecture: $(uname -m). Build from source: $0 rust" >&2; exit 1 ;;
+  esac
+
   DEST="$ROOT/bin"
   mkdir -p "$DEST"
-  rm -f "$DEST/statusline" "$DEST/statusline.sha256"
-  echo "Downloading the prebuilt universal binary."
-  gh release download --repo "$REPO" --pattern statusline --dir "$DEST" --clobber
+  rm -f "$DEST/statusline" "$DEST/$ASSET" "$DEST/statusline.sha256"
+  echo "Downloading the prebuilt binary for $(uname -m)."
+  gh release download --repo "$REPO" --pattern "$ASSET" --dir "$DEST" --clobber
 
   # Verification is mandatory. Previously a missing checksum was swallowed and
   # the check silently skipped, which is the failure mode you least want: an
@@ -77,15 +86,16 @@ if [ "$choice" = binary ]; then
     echo "Build from source instead: $0 rust" >&2
     exit 1
   fi
-  ( cd "$DEST" && shasum -a 256 -c statusline.sha256 ) || {
+  # The checksum file lists both architectures; check only the one we fetched.
+  ( cd "$DEST" && grep " $ASSET\$" statusline.sha256 | shasum -a 256 -c - ) || {
     echo "Checksum did not match. Refusing to install." >&2
-    rm -f "$DEST/statusline"
+    rm -f "$DEST/$ASSET"
     exit 1
   }
 
   # Only executable once it has been verified.
-  chmod +x "$DEST/statusline"
-  BUILT="$DEST/statusline"
+  chmod +x "$DEST/$ASSET"
+  BUILT="$DEST/$ASSET"
 else
   command -v cargo >/dev/null 2>&1 || {
     echo "cargo not found. Install Rust from https://rustup.rs, or run: $0 binary" >&2

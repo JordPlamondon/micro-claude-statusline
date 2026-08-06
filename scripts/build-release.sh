@@ -1,6 +1,6 @@
 #!/bin/sh
-# Builds a universal macOS binary and attaches it to a GitHub release, so that
-# people can install without a Rust toolchain.
+# Builds one macOS binary per architecture and attaches them to a GitHub
+# release, so people can install without a Rust toolchain.
 #
 #   ./scripts/build-release.sh v1.0.0
 #
@@ -30,42 +30,62 @@ echo "Building $ARM"
 echo "Building $INTEL"
 ( cd "$ROOT/rust" && cargo build --release --quiet --target "$INTEL" )
 
+rm -rf "$OUT"
 mkdir -p "$OUT"
-lipo -create -output "$OUT/statusline" \
-  "$ROOT/rust/target/$ARM/release/statusline" \
-  "$ROOT/rust/target/$INTEL/release/statusline"
+
+# One binary per architecture, deliberately NOT a universal binary. On Apple
+# Silicon, exec-ing a fat binary that contains an x86_64 slice costs about 20 ms
+# every time, presumably deciding whether Rosetta is needed. That is ten times
+# the entire runtime of this program. Measured on an M-series Mac:
+#
+#   thin arm64            2.4 ms CPU
+#   fat, arm64 only       2.4 ms
+#   fat, arm64 + x86_64  22.1 ms
+#
+# The fat header itself is free. It is the presence of the Intel slice that
+# costs, so shipping them separately is the whole fix.
+cp "$ROOT/rust/target/$ARM/release/statusline" "$OUT/statusline-arm64"
+cp "$ROOT/rust/target/$INTEL/release/statusline" "$OUT/statusline-x86_64"
 
 echo
-echo "Universal binary:"
-lipo -archs "$OUT/statusline" | sed 's/^/  architectures: /'
-ls -l "$OUT/statusline" | awk '{printf "  size: %.0f KB\n", $5/1024}'
+for f in statusline-arm64 statusline-x86_64; do
+  printf '  %-20s %-8s ' "$f" "$(lipo -archs "$OUT/$f")"
+  ls -l "$OUT/$f" | awk '{printf "%.0f KB\n", $5/1024}'
+done
 
-# A checksum so anyone can confirm what they downloaded is what you built.
-( cd "$OUT" && shasum -a 256 statusline > statusline.sha256 )
-cat "$OUT/statusline.sha256" | sed 's/^/  /'
-
+# Checksums so anyone can confirm what they downloaded is what you built.
+( cd "$OUT" && shasum -a 256 statusline-arm64 statusline-x86_64 > statusline.sha256 )
 echo
-echo "Smoke test:"
+sed 's/^/  /' "$OUT/statusline.sha256"
+
+case "$(uname -m)" in
+  arm64) SMOKE="$OUT/statusline-arm64" ;;
+  *)     SMOKE="$OUT/statusline-x86_64" ;;
+esac
+echo
+echo "Smoke test, native slice:"
 printf '%s' '{"model":{"display_name":"Opus 5"},"workspace":{"current_dir":"/tmp"},"context_window":{"used_percentage":42}}' \
-  | "$OUT/statusline" | sed 's/^/  /'
+  | "$SMOKE" | sed 's/^/  /'
+
+NOTES="One binary per architecture. Verify with statusline.sha256.
+
+Not a universal binary on purpose. On Apple Silicon, exec-ing a fat binary that
+contains an x86_64 slice costs around 20 ms every time, roughly ten times the
+runtime of this program. Shipping them separately avoids that.
+
+Install without a Rust toolchain: ./install.sh"
 
 echo
 if gh release view "$VERSION" >/dev/null 2>&1; then
-  echo "Release $VERSION exists, replacing the asset"
-  gh release upload "$VERSION" "$OUT/statusline" "$OUT/statusline.sha256" --clobber
+  echo "Release $VERSION exists, replacing the assets"
+  gh release upload "$VERSION" \
+    "$OUT/statusline-arm64" "$OUT/statusline-x86_64" "$OUT/statusline.sha256" --clobber
 else
-  gh release create "$VERSION" "$OUT/statusline" "$OUT/statusline.sha256" \
-    --title "$VERSION" \
-    --notes "Universal macOS binary, Apple Silicon and Intel. Verify with statusline.sha256.
-
-Install without a Rust toolchain:
-
-    gh release download $VERSION --repo JordPlamondon/claude-statusline --pattern statusline
-    chmod +x statusline
-
-Or let the installer do it: ./install.sh"
+  gh release create "$VERSION" \
+    "$OUT/statusline-arm64" "$OUT/statusline-x86_64" "$OUT/statusline.sha256" \
+    --title "$VERSION" --notes "$NOTES"
 fi
 
 echo
 echo "Done. Install path for others:"
-echo "  ./install.sh          picks the release binary automatically"
+echo "  ./install.sh          picks the binary for their architecture"
