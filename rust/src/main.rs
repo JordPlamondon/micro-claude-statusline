@@ -303,6 +303,34 @@ fn fmt_duration(seconds: f64) -> String {
     format!("{}m", minutes)
 }
 
+/// A pointer file or a HEAD is a line. A config is a few dozen. Neither is
+/// ever large, so a large one is a mistake or a trap, and reading it would only
+/// hurt.
+pub const SMALL_FILE: u64 = 64 * 1024;
+/// Config and the herdr state, which grows with how many workspaces someone
+/// has accumulated. Generous rather than tight, since being wrong here costs
+/// somebody their settings.
+pub const LARGE_FILE: u64 = 4 * 1024 * 1024;
+/// The real payload is under a kilobyte. This is far above anything Claude
+/// Code would send and far below anything that hurts to allocate.
+const MAX_PAYLOAD: u64 = 4 * 1024 * 1024;
+
+/// Reads a file, refusing past `limit` rather than taking however much of
+/// someone else's disk is on the other end of the path.
+///
+/// Nothing here reads a file it chose itself: the config path comes from
+/// $HOME, the git files from wherever a .git pointer aims, the herdr state
+/// from an env var. Fails closed and prints nothing, the same as every other
+/// malformed input.
+pub fn read_capped(path: &Path, limit: u64) -> Option<String> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut buf = String::new();
+    // limit + 1, so a file exactly at the limit is still readable and one byte
+    // over is detectable rather than silently truncated into nonsense.
+    file.take(limit + 1).read_to_string(&mut buf).ok()?;
+    (buf.len() as u64 <= limit).then_some(buf)
+}
+
 /// Current branch, read straight from .git/HEAD rather than forking git.
 fn git_branch(cwd: &str) -> Option<String> {
     if cwd.is_empty() {
@@ -328,7 +356,7 @@ fn git_branch(cwd: &str) -> Option<String> {
 
     if dotgit.is_file() {
         // Linked worktree: "gitdir: /abs/path/.git/worktrees/<name>"
-        let pointer = std::fs::read_to_string(&dotgit).ok()?;
+        let pointer = read_capped(&dotgit, SMALL_FILE)?;
         let pointer = pointer.trim();
         if !pointer.starts_with("gitdir:") {
             return None;
@@ -341,7 +369,7 @@ fn git_branch(cwd: &str) -> Option<String> {
         };
     }
 
-    let head = std::fs::read_to_string(dotgit.join("HEAD")).ok()?;
+    let head = read_capped(&dotgit.join("HEAD"), SMALL_FILE)?;
     let head = head.trim();
 
     const PREFIX: &str = "ref: refs/heads/";
@@ -412,7 +440,10 @@ fn herdr_workspace_name() -> Option<String> {
         return None;
     }
     let home = std::env::var("HOME").ok()?;
-    let raw = std::fs::read_to_string(format!("{}/.config/herdr/session.json", home)).ok()?;
+    let raw = read_capped(
+        Path::new(&format!("{home}/.config/herdr/session.json")),
+        LARGE_FILE,
+    )?;
     let state = json::parse(&raw)?;
     for workspace in state.path("workspaces")?.as_arr()? {
         if workspace.get("id").and_then(Value::as_str) == Some(id.as_str()) {
@@ -829,7 +860,14 @@ fn main() {
     }
 
     let mut raw = String::new();
-    if std::io::stdin().read_to_string(&mut raw).is_err() {
+    // Capped like every other read. Nothing chooses what arrives on stdin, and
+    // a payload past this is not one Claude Code sent.
+    if std::io::stdin()
+        .take(MAX_PAYLOAD + 1)
+        .read_to_string(&mut raw)
+        .is_err()
+        || raw.len() as u64 > MAX_PAYLOAD
+    {
         return;
     }
 

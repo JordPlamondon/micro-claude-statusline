@@ -113,12 +113,26 @@ eleven lines of bash and will serve you fine.
 - `<repo>/.git/HEAD`, for the branch, without forking `git`
 - `~/.config/herdr/session.json`, only when `$HERDR_WORKSPACE_ID` is set
 
-Writes to stdout and nothing else. No network, no subprocesses, no credentials,
-no `unsafe`, and no third-party crates: `Cargo.lock` contains only this package.
+Writes to stdout and nothing else. The whole surface, and how to check each row
+rather than take it on faith:
+
+| | | how to check |
+|---|---|---|
+| Third-party crates | 0 | `grep -c '^name = ' rust/Cargo.lock` is 1, and the suite fails if it is not |
+| Network calls | 0 | runs fine under `sandbox-exec` with `(deny network*)` |
+| Subprocesses | 0 | no `Command` anywhere in `rust/src` |
+| Credentials read | 0 | the rate limits arrive in the payload already |
+| `unsafe` blocks | 0 | `#![forbid(unsafe_code)]`, so the build fails rather than the reviewer |
+| Files opened | 4 | listed above, each with a size cap |
+| Lines of Rust | ~1,700 | readable in an evening, which is the point |
+| Binary | 393 KB | reproducible, so you can check it came from this source |
 
 Everything it did not write is treated as hostile. Control characters are
 stripped from all rendered text, since a directory name containing an escape
-would otherwise reach your terminal as an escape.
+would otherwise reach your terminal as an escape. Every read is capped, so a
+huge file where a small one was expected is ignored rather than loaded. The
+parser is checked against 1,500 malformed and mutated payloads on every test
+run, because a panic here is a status line that vanishes mid-session.
 
 Some status lines fetch quota from an API and need a token in your keychain.
 This one does not, because the rate limits arrive in the payload already.

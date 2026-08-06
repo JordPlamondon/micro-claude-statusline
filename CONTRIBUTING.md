@@ -43,6 +43,13 @@ dependencies is the claim that separates this from every comparable tool, and
 it is the kind that stops being true quietly: someone reaches for a crate to
 save twenty lines and nobody notices until a reader checks.
 
+Then it fuzzes: 1,500 mutations of a valid payload plus a set of shapes aimed
+at the parser's own arithmetic, checking only that the program is still
+standing afterwards. There is no correct bar for a corrupted payload, but a
+panic is a status line that vanishes mid-session and leaves an abort message
+where the bar should be. The seed is fixed, so a failure reports an input you
+can reproduce rather than one that happened once. It adds about eight seconds.
+
 Time is pinned with `$STATUSLINE_TEST_PINNED_CLOCK`, `$COLUMNS` is pinned, and
 `$HOME` is redirected to a scratch directory, so the same input produces the
 same bytes on any machine at any time of day.

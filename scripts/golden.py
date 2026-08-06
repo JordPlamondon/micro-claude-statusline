@@ -15,6 +15,7 @@ rounding. Time is pinned via $STATUSLINE_TEST_PINNED_CLOCK so countdowns are det
 
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -57,6 +58,89 @@ def check_lockfile():
             "Cargo.lock should contain statusline and nothing else, found: "
             + ", ".join(names)
         )
+
+
+# Fixed, so a failure is reproducible from the reported case rather than
+# "it happened once on my machine".
+FUZZ_SEED = 20260806
+FUZZ_ROUNDS = 1500
+
+# Shapes a random mutation is unlikely to stumble on, aimed at the parts of the
+# parser with their own arithmetic: the depth cap, escape decoding, surrogate
+# pairs, number parsing and the UTF-8 run copier.
+FUZZ_STRUCTURAL = [
+    b"{" * 500,
+    b"[" * 500,
+    b'{"a":' * 300,
+    b'{"a":"\\u',
+    b'{"a":"\\ud800"}',
+    b'{"a":"\\ud800\\ud800"}',
+    b'{"a":"\\udfff"}',
+    b'{"a":1e999999}',
+    b'{"a":-1e999999}',
+    b'{"a":' + b"9" * 5000 + b"}",
+    b'{"a":"' + b"\xff" * 200 + b'"}',
+    b'{"a":"' + b"\xe4\xb8" * 200 + b'"}',
+    b'{"a":"\\',
+    b'{"":""}',
+    b'{"a":"\x00\x01\x02"}',
+]
+
+
+def mutate(rng, base):
+    """A few byte-level edits to a valid payload."""
+    out = bytearray(base)
+    for _ in range(rng.randint(1, 6)):
+        if not out:
+            break
+        op = rng.randrange(5)
+        i = rng.randrange(len(out))
+        if op == 0:
+            del out[i]
+        elif op == 1:
+            out.insert(i, rng.randrange(256))
+        elif op == 2:
+            out[i] = rng.randrange(256)
+        elif op == 3:
+            del out[i:]
+        else:
+            out[i:i] = out[i : i + rng.randint(1, 16)]
+    return bytes(out)
+
+
+def fuzz(binary, home):
+    """Malformed input must produce nothing, never a crash.
+
+    The JSON parser is hand-rolled and reads whatever arrives on stdin, so a
+    panic there is a status line that vanishes mid-session and leaves an abort
+    message where the bar should be. The golden cases pin what valid input
+    renders; this pins that invalid input is survived.
+
+    Checks the exit status rather than the output. There is no correct bar for
+    a corrupted payload, only a requirement that the program still be standing.
+    """
+    rng = random.Random(FUZZ_SEED)
+    base = json.dumps(CONFIG_PAYLOAD).encode()
+    inputs = list(FUZZ_STRUCTURAL)
+    inputs += [mutate(rng, base) for _ in range(FUZZ_ROUNDS)]
+
+    env = dict(os.environ)
+    env["HOME"] = home
+    env["COLUMNS"] = "999"
+    env["STATUSLINE_TEST_PINNED_CLOCK"] = str(FIXED_NOW)
+    env.pop("HERDR_WORKSPACE_ID", None)
+    cmd = binary if isinstance(binary, list) else [binary]
+
+    for n, data in enumerate(inputs, 1):
+        done = subprocess.run(cmd, input=data, capture_output=True, env=env)
+        if done.returncode != 0 or b"panicked" in done.stderr:
+            sys.exit(
+                f"fuzz: input {n} of {len(inputs)} brought it down\n"
+                f"  exit {done.returncode}\n"
+                f"  stderr: {done.stderr.decode('utf-8', 'replace').strip()[:200]}\n"
+                f"  input: {data[:200]!r}"
+            )
+    print(f"fuzz: {len(inputs)}/{len(inputs)} malformed inputs survived")
 
 
 def find_binary():
@@ -167,6 +251,9 @@ def main():
 
     with tempfile.TemporaryDirectory() as workdir:
         results = collect(binary, workdir)
+        # Inside the scratch HOME, so a config on this machine cannot change
+        # what the parser is handed.
+        fuzz(binary, os.path.join(workdir, "plain"))
 
     text = serialise(results)
 

@@ -157,9 +157,9 @@ pub fn load() -> Config {
         Ok(h) => h,
         Err(_) => return cfg,
     };
-    let raw = match std::fs::read_to_string(format!("{home}/.claude/statusline.json")) {
-        Ok(r) => r,
-        Err(_) => return cfg,
+    let path = format!("{home}/.claude/statusline.json");
+    let Some(raw) = crate::read_capped(std::path::Path::new(&path), crate::LARGE_FILE) else {
+        return cfg;
     };
     let v = match json::parse(raw.trim()) {
         Some(v @ Value::Obj(_)) => v,
