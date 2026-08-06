@@ -3,10 +3,14 @@
 A status line for [Claude Code](https://code.claude.com/docs/en/statusline). Six
 themes, configurable segments, Nord by default.
 
+![The status line in the Nord theme](docs/nord.png)
+
+As text, for anyone reading this in a terminal:
+
 ```
-my-feature │ Opus 5 (1M context) │ empirehomes.com ⎇ feature/promo-p3 │ PR #265 ✓ │ xhigh
-┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
-████░░░░░░░░░░░░ 25% 254k/1M │ 5h ██▎░░░ 38% 2h 19m │ 7d ███▏░░ 52% 5d 1h │ $5.72
+promo-combine │ Opus 5 (1M context) │ acme-site │ PR #265 ✓ │ high
+┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
+██████▊░░░░░░░░░ 42% 424k/1M │ 5h ██▎░░░ 38% 2h 19m │ 7d ███▋░░ 61% 5d 1h │ $5.72
 ```
 
 Row one is identity: session name, model, directory, git branch, open PR with
@@ -145,6 +149,8 @@ order. Drop one by leaving it out, move it to the other row, or reorder freely.
 
 **Themes**: `nord`, `catppuccin`, `tokyo-night`, `gruvbox`, `dracula`,
 `one-dark`. List them with `--themes`.
+
+![All six themes](docs/themes.png)
 
 **Individual colours** override whichever theme is active. Accepts `"#88C0D0"`,
 `"#8cd"` or `[136, 192, 208]`.
