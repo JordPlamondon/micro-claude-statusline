@@ -173,9 +173,7 @@ want:
 { "preset": "compact" }
 ```
 
-```
-promo-combine │ aoe ⎇ main │ ████▎░░░░░ 42% 424k/1M │ 5h █▌░░ 38% 2h 19m │ $5.72
-```
+![The compact layout, one row](docs/compact.png)
 
 It sets `line1` to session, location, context, limits and cost, empties `line2`,
 narrows the meters, and removes the gap and the bottom spacing. Model is dropped
@@ -261,8 +259,9 @@ Try a theme before committing to it. Sample data, so it looks the same for
 everyone:
 
 ```sh
-statusline --preview            all six, stacked
-statusline --preview gruvbox    just that one
+statusline --preview              all six, stacked
+statusline --preview gruvbox      just that one
+statusline --preview --compact    the one-row layout
 ```
 
 Rebuild after editing the Rust source, then re-run the installer to copy the

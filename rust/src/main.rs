@@ -594,6 +594,7 @@ claude-statusline
 
   (no arguments)      read the Claude Code payload on stdin, print the bar
   --preview [THEME]   render a sample bar, all themes if none is named
+  --preview --compact same, in the one-row compact layout
   --init [--force]    write a commented ~/.claude/statusline.json
   --themes            list theme names
   --help              this
@@ -601,8 +602,11 @@ claude-statusline
 
 /// Renders the sample payload under one theme, ignoring the user's config so
 /// the comparison is like for like.
-fn preview_one(name: &str, data: &Value, out: &mut String) {
+fn preview_one(name: &str, data: &Value, preset: Option<&str>, out: &mut String) {
     let mut cfg = Config::default();
+    if let Some(p) = preset {
+        config::apply_preset(&mut cfg, p);
+    }
     cfg.palette = theme::by_name(name);
     // Keep the user's colour depth so the preview matches what they will see.
     cfg.truecolor = Some(detect_truecolor(&Config::default()));
@@ -618,7 +622,7 @@ fn preview_one(name: &str, data: &Value, out: &mut String) {
     out.push('\n');
 }
 
-fn preview(requested: Option<&str>) -> i32 {
+fn preview(requested: Option<&str>, preset: Option<&str>) -> i32 {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -637,12 +641,12 @@ fn preview(requested: Option<&str>) -> i32 {
                 eprintln!("try one of: {}", theme::NAMES.join(", "));
                 return 1;
             }
-            preview_one(name, &data, &mut out);
+            preview_one(name, &data, preset, &mut out);
         }
         None => {
             out.push_str("sample data, not your session\n\n");
             for name in theme::NAMES {
-                preview_one(name, &data, &mut out);
+                preview_one(name, &data, preset, &mut out);
             }
         }
     }
@@ -675,7 +679,8 @@ fn main() {
             .and_then(|i| args.get(i + 1))
             .filter(|a| !a.starts_with('-'))
             .map(String::as_str);
-        std::process::exit(preview(named));
+        let preset = flag("--compact").then_some("compact");
+        std::process::exit(preview(named, preset));
     }
 
     let mut raw = String::new();

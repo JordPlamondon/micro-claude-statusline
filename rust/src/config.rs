@@ -123,7 +123,7 @@ fn segments_at(v: &Value, key: &str, current: Vec<String>) -> Vec<String> {
 /// Presets are starting points, applied before the individual keys so anything
 /// you set explicitly still wins. "compact" collapses the whole thing to one
 /// row for people who do not want four lines of chrome above the prompt.
-fn apply_preset(cfg: &mut Config, name: &str) {
+pub fn apply_preset(cfg: &mut Config, name: &str) {
     match name {
         "compact" => {
             // Everything on one row. Model is dropped rather than shortened:
