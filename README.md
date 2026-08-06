@@ -147,3 +147,7 @@ stay. Its open-PR badge shows the same PR as the `pr` segment here, so drop
 
 Negative `padding` in `settings.json` clips the leftmost character until a
 keystroke forces a repaint. Leave it at 0.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
