@@ -10,6 +10,11 @@
 //! Output is pinned by tests/golden.txt. Run scripts/golden.py after any change
 //! that touches what gets printed.
 
+// There is no unsafe here and there is no reason for there ever to be any: the
+// program reads a string, formats a string and prints it. forbid rather than
+// deny, so it cannot be switched off locally by an allow attribute further in.
+#![forbid(unsafe_code)]
+
 mod cli;
 mod config;
 mod json;

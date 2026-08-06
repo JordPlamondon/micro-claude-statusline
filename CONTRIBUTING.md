@@ -25,10 +25,16 @@ cd rust && cargo build --release && cd ..
 python3 scripts/golden.py
 ```
 
-372 recorded cases in `tests/golden.txt`, compared byte for byte. Every whole
+432 recorded cases in `tests/golden.txt`, compared byte for byte. Every whole
 percent through the meters, token and duration boundaries, all PR states,
-worktrees, every theme, config permutations, ten terminal widths, and missing
-or malformed input, under both 24-bit and 256-colour.
+worktrees, every theme, config permutations, wide characters, ten terminal
+widths swept twice, and missing or malformed input, under both 24-bit and
+256-colour.
+
+It also checks that `Cargo.lock` still contains exactly one package. Zero
+dependencies is the claim that separates this from every comparable tool, and
+it is the kind that stops being true quietly: someone reaches for a crate to
+save twenty lines and nobody notices until a reader checks.
 
 Time is pinned with `$STATUSLINE_TEST_PINNED_CLOCK`, `$COLUMNS` is pinned, and
 `$HOME` is redirected to a scratch directory, so the same input produces the
@@ -48,3 +54,19 @@ floating point and loses the tie-break.
 The expectations were originally recorded from a separate Python implementation
 that has since been removed, so they pin reviewed behaviour rather than
 whatever the current code happens to do.
+
+## Checking the speed claim
+
+```sh
+python3 scripts/bench.py
+```
+
+Runs the docs bash example against this binary on the same payload and prints
+the table the README quotes. Needs `jq`, takes about half a minute, and
+measures CPU rather than wall clock: a chain of short-lived processes spends
+much of its wall time descheduled rather than computing, which understates the
+gap. Interleaved and best-of-five, because a single-trial loop on a warm laptop
+varies by a factor of three and will report the wrong winner.
+
+The README says "about 40x". It measures higher than that here, so the figure
+in the README is deliberately the conservative end.

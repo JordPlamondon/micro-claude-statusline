@@ -71,6 +71,11 @@ docs extended with a token count, so both show comparable information:
 Each `jq` in a shell status line is another process, so its cost grows as you
 add fields. This parses the payload once.
 
+Don't take the number on trust, `python3 scripts/bench.py` runs both and prints
+the table. It needs `jq`, takes about half a minute, and measures CPU rather
+than wall clock because a chain of short-lived processes spends much of its
+wall time descheduled rather than computing.
+
 Invisible at one session. It compounds when several are working at once, since
 the status line re-runs on every event:
 

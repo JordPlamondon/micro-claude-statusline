@@ -15,6 +15,7 @@ rounding. Time is pinned via $STATUSLINE_TEST_PINNED_CLOCK so countdowns are det
 
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -38,6 +39,24 @@ BINARIES = [
     os.path.join(ROOT, "rust", "target", "release", "statusline"),
     os.path.join(ROOT, "bin", "statusline"),
 ]
+
+
+def check_lockfile():
+    """One package in Cargo.lock, and it is this program.
+
+    Zero dependencies is the claim that separates this from every comparable
+    tool, and it is the kind that stops being true quietly: someone reaches for
+    a crate to save twenty lines, the lockfile grows a transitive tail, and
+    nobody notices until a reader checks. Comparable Rust status lines carry
+    seven to fifteen.
+    """
+    with open(os.path.join(ROOT, "rust", "Cargo.lock")) as fh:
+        names = re.findall(r'^name = "(.+)"$', fh.read(), re.M)
+    if names != ["statusline"]:
+        sys.exit(
+            "Cargo.lock should contain statusline and nothing else, found: "
+            + ", ".join(names)
+        )
 
 
 def find_binary():
@@ -139,6 +158,7 @@ def serialise(results):
 
 def main():
     update = "--update" in sys.argv[1:]
+    check_lockfile()
     binary = find_binary()
     shown = " ".join(binary) if isinstance(binary, list) else binary
     print(f"testing: {os.path.relpath(shown.split()[-1], ROOT)}")
@@ -199,4 +219,5 @@ def main():
     return 1
 
 
-sys.exit(main())
+if __name__ == "__main__":
+    sys.exit(main())
