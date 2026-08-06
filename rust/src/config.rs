@@ -120,6 +120,30 @@ fn segments_at(v: &Value, key: &str, current: Vec<String>) -> Vec<String> {
     }
 }
 
+/// Presets are starting points, applied before the individual keys so anything
+/// you set explicitly still wins. "compact" collapses the whole thing to one
+/// row for people who do not want four lines of chrome above the prompt.
+fn apply_preset(cfg: &mut Config, name: &str) {
+    match name {
+        "compact" => {
+            // Everything on one row. Model is dropped rather than shortened:
+            // it is identical in every session, so it is the least informative
+            // thing competing for the space.
+            cfg.line1 = ["session", "location", "context", "limits", "cost"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+            cfg.line2 = Vec::new();
+            cfg.bar_width = 10;
+            cfg.limit_bar_width = 4;
+            cfg.gap = "none".to_string();
+            cfg.bottom_spacing = 0;
+        }
+        // "full" is the default shape, named so it can be stated explicitly.
+        _ => {}
+    }
+}
+
 pub fn load() -> Config {
     let mut cfg = Config::default();
 
@@ -135,6 +159,11 @@ pub fn load() -> Config {
         Some(v @ Value::Obj(_)) => v,
         _ => return cfg,
     };
+
+    // Before everything else, so explicit keys override the preset.
+    if let Some(preset) = v.path("preset").and_then(Value::as_str) {
+        apply_preset(&mut cfg, &preset.trim().to_lowercase());
+    }
 
     if let Some(name) = v.path("theme").and_then(Value::as_str) {
         cfg.palette = theme::by_name(&name.trim().to_lowercase());

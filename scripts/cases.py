@@ -212,6 +212,10 @@ CONFIG_CASES = [
     ("short session width", {"session_name_width": 6}),
     ("forced truecolor off", {"truecolor": False}),
     ("garbage values ignored", {"theme": "nope", "bar_width": 0, "gap": "weird", "gap_scale": 9}),
+    ("preset compact", {"preset": "compact"}),
+    ("preset compact, overridden", {"preset": "compact", "bar_width": 16, "gap": "rule"}),
+    ("preset compact + theme", {"preset": "compact", "theme": "gruvbox"}),
+    ("preset unknown", {"preset": "nope"}),
 ]
 
 CONFIG_PAYLOAD = {

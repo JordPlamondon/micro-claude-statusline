@@ -25,6 +25,9 @@ pub fn sample_payload(now: i64) -> String {
 }
 
 pub const DEFAULT_CONFIG: &str = r#"{
+  "// preset": "compact puts everything on one row. Omit for the default two.",
+  "// note on presets": "a starting point only, keys below still override it",
+
   "// theme": "nord | catppuccin | tokyo-night | gruvbox | dracula | one-dark",
   "theme": "nord",
 

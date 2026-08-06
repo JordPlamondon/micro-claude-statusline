@@ -163,9 +163,31 @@ fatal, so a stray comma costs you a setting and not the whole bar.
 }
 ```
 
-Those are the defaults, so an empty `{}` behaves the same as no file. `--init`
-writes exactly this, with each key commented, which is easier than copying it
-from here:
+Those are the defaults, so an empty `{}` behaves the same as no file.
+
+**`preset`** is a shortcut for a set of them. `compact` puts everything on one
+row, which is worth having if four lines above your prompt is more than you
+want:
+
+```json
+{ "preset": "compact" }
+```
+
+```
+promo-combine │ aoe ⎇ main │ ████▎░░░░░ 42% 424k/1M │ 5h █▌░░ 38% 2h 19m │ $5.72
+```
+
+It sets `line1` to session, location, context, limits and cost, empties `line2`,
+narrows the meters, and removes the gap and the bottom spacing. Model is dropped
+rather than shortened, since it is identical in every session and so the least
+informative thing competing for the room.
+
+A preset is only a starting point. Anything you set explicitly still wins, so
+`{"preset": "compact", "bar_width": 16}` gives you the one-row layout with the
+wider meter.
+
+`--init` writes the full default config with each key commented, which is easier
+than copying it from here:
 
 ```sh
 statusline --init            # refuses to overwrite an existing config
