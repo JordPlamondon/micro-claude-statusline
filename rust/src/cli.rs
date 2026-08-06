@@ -60,7 +60,7 @@ pub const DEFAULT_CONFIG: &str = r#"{
   "bottom_spacing": 1,
 
   "// colors": "override individual slots on top of the theme. Hex or [r,g,b].",
-  "// slots": "separator, dim, muted, bright, brightest, accent_a, accent_b, accent_c, model, good, warn, bad, notice",
+  "// slots": "{{SLOTS}}",
   "colors": {},
 
   "// responsive": "shed segments rather than let a row wrap. false keeps them all.",
@@ -102,6 +102,10 @@ pub fn init(force: bool) -> i32 {
         .replace(
             "{{SEGMENTS}}",
             &crate::segment_names().collect::<Vec<_>>().join(", "),
+        )
+        .replace(
+            "{{SLOTS}}",
+            &theme::slot_names().collect::<Vec<_>>().join(", "),
         );
 
     match std::fs::write(&path, &body) {

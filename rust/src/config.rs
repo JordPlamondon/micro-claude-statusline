@@ -181,22 +181,9 @@ pub fn load() -> Config {
     if let Some(Value::Obj(map)) = v.path("colors") {
         for (slot, raw) in map {
             let Some(rgb) = parse_colour(raw) else { continue };
-            let p = &mut cfg.palette;
-            match slot.as_str() {
-                "separator" => p.separator = rgb,
-                "dim" => p.dim = rgb,
-                "muted" => p.muted = rgb,
-                "bright" => p.bright = rgb,
-                "brightest" => p.brightest = rgb,
-                "accent_a" => p.accent_a = rgb,
-                "accent_b" => p.accent_b = rgb,
-                "accent_c" => p.accent_c = rgb,
-                "model" => p.model = rgb,
-                "good" => p.good = rgb,
-                "warn" => p.warn = rgb,
-                "bad" => p.bad = rgb,
-                "notice" => p.notice = rgb,
-                _ => {}
+            // Unknown slot names are ignored, same as unknown segment names.
+            if let Some((_, set)) = theme::SLOTS.iter().find(|(n, _)| *n == slot.as_str()) {
+                set(&mut cfg.palette, rgb);
             }
         }
     }

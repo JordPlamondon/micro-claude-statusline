@@ -36,6 +36,32 @@ pub struct Palette {
     pub notice: Rgb,
 }
 
+/// Every slot a config file can override, bound to the field it sets.
+///
+/// These names appear in the config, in the `--init` template and in
+/// CONFIG.md. Binding them to the fields here means the parser cannot drift
+/// from the struct: adding a field and forgetting to extend the parser used to
+/// mean a slot that documented itself and then quietly did nothing.
+pub const SLOTS: [(&str, fn(&mut Palette, Rgb)); 13] = [
+    ("separator", |p, c| p.separator = c),
+    ("dim", |p, c| p.dim = c),
+    ("muted", |p, c| p.muted = c),
+    ("bright", |p, c| p.bright = c),
+    ("brightest", |p, c| p.brightest = c),
+    ("accent_a", |p, c| p.accent_a = c),
+    ("accent_b", |p, c| p.accent_b = c),
+    ("accent_c", |p, c| p.accent_c = c),
+    ("model", |p, c| p.model = c),
+    ("good", |p, c| p.good = c),
+    ("warn", |p, c| p.warn = c),
+    ("bad", |p, c| p.bad = c),
+    ("notice", |p, c| p.notice = c),
+];
+
+pub fn slot_names() -> impl Iterator<Item = &'static str> {
+    SLOTS.iter().map(|(name, _)| *name)
+}
+
 impl Palette {
     /// Meter stops, derived so a new theme does not have to restate them.
     pub fn gradient(&self) -> [(f64, Rgb); 4] {
