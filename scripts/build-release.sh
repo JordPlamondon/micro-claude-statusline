@@ -35,6 +35,15 @@ CRATE_VERSION=$(grep '^version = ' "$ROOT/rust/Cargo.toml" | head -1 | cut -d'"'
   exit 1
 }
 
+# Checked here rather than in the test suite, which deliberately runs against a
+# downloaded binary and needs no toolchain. Cosmetic, unlike the check above, but
+# every tag someone checks out to read should be formatted.
+( cd "$ROOT/rust" && cargo fmt --check >/dev/null 2>&1 ) || {
+  echo "rust/src is not rustfmt-clean." >&2
+  echo "Run: cd rust && cargo fmt, then commit, then re-run." >&2
+  exit 1
+}
+
 # Reproducible, so anyone can rebuild these assets and get the same bytes.
 CRATE_DIR="$ROOT/rust"
 . "$ROOT/scripts/rustflags.sh"
