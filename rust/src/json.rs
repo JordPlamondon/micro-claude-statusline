@@ -269,8 +269,8 @@ impl<'a> Parser<'a> {
                                 self.pos += 2;
                                 let hex2 = self.bytes.get(self.pos..self.pos + 4)?;
                                 self.pos += 4;
-                                let low =
-                                    u32::from_str_radix(std::str::from_utf8(hex2).ok()?, 16).ok()?;
+                                let low = u32::from_str_radix(std::str::from_utf8(hex2).ok()?, 16)
+                                    .ok()?;
                                 code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00);
                             }
                             out.push(char::from_u32(code)?);
@@ -290,7 +290,10 @@ impl<'a> Parser<'a> {
         if self.peek() == Some(b'-') {
             self.pos += 1;
         }
-        while matches!(self.peek(), Some(b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')) {
+        while matches!(
+            self.peek(),
+            Some(b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')
+        ) {
             self.pos += 1;
         }
         if start == self.pos {

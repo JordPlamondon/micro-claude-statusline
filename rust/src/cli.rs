@@ -98,7 +98,10 @@ pub fn init(force: bool) -> i32 {
     // remembering to update a second copy. Substitution rather than format!,
     // because the template contains a literal "colors": {}.
     let body = DEFAULT_CONFIG
-        .replace("{{THEMES}}", &theme::names().collect::<Vec<_>>().join(" | "))
+        .replace(
+            "{{THEMES}}",
+            &theme::names().collect::<Vec<_>>().join(" | "),
+        )
         .replace(
             "{{SEGMENTS}}",
             &crate::segment_names().collect::<Vec<_>>().join(", "),

@@ -59,8 +59,7 @@ fn to_256(c: Rgb) -> u8 {
         best
     };
     let (ri, gi, bi) = (axis(r), axis(g), axis(b));
-    let cube_err =
-        (r - LEVELS[ri]).pow(2) + (g - LEVELS[gi]).pow(2) + (b - LEVELS[bi]).pow(2);
+    let cube_err = (r - LEVELS[ri]).pow(2) + (g - LEVELS[gi]).pow(2) + (b - LEVELS[bi]).pow(2);
 
     // Grey ramp is 232..=255 at 8 + 10n.
     let avg = (r + g + b) / 3;
@@ -147,9 +146,8 @@ impl<'a> Ctx<'a> {
             if t0 <= t && t <= t1 {
                 let span = t1 - t0;
                 let f = if span == 0.0 { 0.0 } else { (t - t0) / span };
-                let mix = |a: u8, b: u8| {
-                    round_half_even(a as f64 + (b as f64 - a as f64) * f) as u8
-                };
+                let mix =
+                    |a: u8, b: u8| round_half_even(a as f64 + (b as f64 - a as f64) * f) as u8;
                 return (mix(c0.0, c1.0), mix(c0.1, c1.1), mix(c0.2, c1.2));
             }
         }
@@ -460,7 +458,11 @@ fn herdr_workspace_name() -> Option<String> {
 
 /// Prefer the herdr workspace label, which is what its tab bar shows.
 fn session_label(data: &Value, width: usize, use_herdr: bool) -> Option<String> {
-    let herdr = if use_herdr { herdr_workspace_name() } else { None };
+    let herdr = if use_herdr {
+        herdr_workspace_name()
+    } else {
+        None
+    };
     let name = herdr.or_else(|| data.str_path("session_name"))?;
     let chars: Vec<char> = name.chars().collect();
     if chars.len() > width {
@@ -535,7 +537,11 @@ fn seg_modes(ctx: &Ctx, data: &Value) -> Option<String> {
     if let Some(effort) = data.path("effort.level").and_then(Value::as_str) {
         modes.push(ctx.paint(effort, p.muted));
     }
-    if data.path("fast_mode").map(Value::is_truthy).unwrap_or(false) {
+    if data
+        .path("fast_mode")
+        .map(Value::is_truthy)
+        .unwrap_or(false)
+    {
         modes.push(ctx.paint("fast", p.notice));
     }
     (!modes.is_empty()).then(|| modes.join(" "))
@@ -728,7 +734,11 @@ fn detect_truecolor(cfg: &Config) -> bool {
 fn render(cfg: &Config, data: &Value) -> Option<String> {
     let ctx = Ctx::new(cfg, detect_truecolor(cfg));
 
-    let budget = if cfg.responsive { terminal_width() } else { None };
+    let budget = if cfg.responsive {
+        terminal_width()
+    } else {
+        None
+    };
 
     let lines: Vec<String> = [
         build_line(&cfg.line1, &ctx, data, budget),
@@ -820,7 +830,10 @@ fn preview(requested: Option<&str>, preset: Option<&str>) -> i32 {
         Some(name) => {
             if !theme::names().any(|n| n == name) {
                 eprintln!("unknown theme: {name}");
-                eprintln!("try one of: {}", theme::names().collect::<Vec<_>>().join(", "));
+                eprintln!(
+                    "try one of: {}",
+                    theme::names().collect::<Vec<_>>().join(", ")
+                );
                 return 1;
             }
             preview_one(name, &data, preset, &mut out);

@@ -106,7 +106,11 @@ fn parse_colour(v: &Value) -> Option<Rgb> {
     match s.len() {
         3 => {
             let mut it = s.chars();
-            Some((expand(it.next()?)?, expand(it.next()?)?, expand(it.next()?)?))
+            Some((
+                expand(it.next()?)?,
+                expand(it.next()?)?,
+                expand(it.next()?)?,
+            ))
         }
         6 => Some((
             u8::from_str_radix(&s[0..2], 16).ok()?,
@@ -178,7 +182,9 @@ pub fn load() -> Config {
     // Per-slot overrides applied on top of the chosen theme.
     if let Some(Value::Obj(map)) = v.path("colors") {
         for (slot, raw) in map {
-            let Some(rgb) = parse_colour(raw) else { continue };
+            let Some(rgb) = parse_colour(raw) else {
+                continue;
+            };
             // Unknown slot names are ignored, same as unknown segment names.
             if let Some((_, set)) = theme::SLOTS.iter().find(|(n, _)| *n == slot.as_str()) {
                 set(&mut cfg.palette, rgb);
