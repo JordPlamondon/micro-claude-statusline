@@ -228,9 +228,7 @@ pub fn load() -> Config {
     if let Some(Value::Bool(b)) = v.path("responsive") {
         cfg.responsive = *b;
     }
-    if v.path("drop_order").and_then(Value::as_arr).is_some() {
-        cfg.drop_order = segments_at(&v, "drop_order", cfg.drop_order.clone());
-    }
+    cfg.drop_order = segments_at(&v, "drop_order", cfg.drop_order);
 
     cfg
 }
