@@ -271,6 +271,11 @@ impl<'a> Parser<'a> {
                                 self.pos += 4;
                                 let low = u32::from_str_radix(std::str::from_utf8(hex2).ok()?, 16)
                                     .ok()?;
+                                // Unchecked, a low half under 0xDC00 underflows and invents a
+                                // character: "\uD800\u0041" produced U+2441.
+                                if !(0xDC00..0xE000).contains(&low) {
+                                    return None;
+                                }
                                 code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00);
                             }
                             out.push(char::from_u32(code)?);
@@ -301,5 +306,89 @@ impl<'a> Parser<'a> {
         }
         let raw = std::str::from_utf8(&self.bytes[start..self.pos]).ok()?;
         Some(Value::Num(raw.parse().ok()?, raw.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The "a" field of an object, as a string.
+    fn a(input: &str) -> Option<String> {
+        parse(input)?.path("a")?.as_str().map(str::to_string)
+    }
+
+    #[test]
+    fn surrogate_pair_decodes() {
+        assert_eq!(a(r#"{"a":"\uD83D\uDE00"}"#).as_deref(), Some("😀"));
+    }
+
+    #[test]
+    fn low_half_below_range_rejected() {
+        // Unchecked this underflowed and produced U+2441.
+        assert!(parse(r#"{"a":"\uD800\u0041"}"#).is_none());
+    }
+
+    #[test]
+    fn low_half_above_range_rejected() {
+        assert!(parse(r#"{"a":"\uD800\uE000"}"#).is_none());
+    }
+
+    #[test]
+    fn lone_high_surrogate_rejected() {
+        assert!(parse(r#"{"a":"\uD800"}"#).is_none());
+    }
+
+    #[test]
+    fn lone_low_surrogate_rejected() {
+        assert!(parse(r#"{"a":"\uDC00"}"#).is_none());
+    }
+
+    #[test]
+    fn escapes_decode() {
+        assert_eq!(
+            a(r#"{"a":"x\ty\nz\"q\\w"}"#).as_deref(),
+            Some("x\ty\nz\"q\\w")
+        );
+    }
+
+    #[test]
+    fn number_keeps_its_original_text() {
+        assert_eq!(
+            parse(r#"{"a":12}"#).unwrap().path("a").unwrap().as_raw(),
+            Some("12")
+        );
+        assert_eq!(
+            parse(r#"{"a":12.0}"#).unwrap().path("a").unwrap().as_raw(),
+            Some("12.0")
+        );
+    }
+
+    #[test]
+    fn nesting_past_the_cap_is_rejected() {
+        let n = MAX_DEPTH + 1;
+        assert!(parse(&format!("{}1{}", "[".repeat(n), "]".repeat(n))).is_none());
+        let n = MAX_DEPTH - 1;
+        assert!(parse(&format!("{}1{}", "[".repeat(n), "]".repeat(n))).is_some());
+    }
+
+    #[test]
+    fn trailing_content_is_rejected() {
+        assert!(parse(r#"{"a":1} junk"#).is_none());
+    }
+
+    #[test]
+    fn null_reads_as_absent() {
+        assert!(parse(r#"{"a":null}"#).unwrap().path("a").is_none());
+    }
+
+    #[test]
+    fn multibyte_survives_the_run_copier() {
+        assert_eq!(a(r#"{"a":"日本語 ok"}"#).as_deref(), Some("日本語 ok"));
+    }
+
+    #[test]
+    fn unterminated_string_is_rejected() {
+        assert!(parse(r#"{"a":"oops"#).is_none());
     }
 }
