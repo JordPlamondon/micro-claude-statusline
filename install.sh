@@ -194,7 +194,7 @@ COMMAND="$INSTALLED"
 # A symlink on PATH, so `statusline --preview` and `statusline --init` work
 # without typing the full path. Skipped when ~/.local/bin is not on PATH, since
 # putting it there would then be pointless.
-echo "  binary     -> $COMMAND"
+echo "  binary     -> $COMMAND  ($("$COMMAND" --version 2>/dev/null || echo "version unknown"))"
 
 case ":${PATH}:" in
   *":${HOME}/.local/bin:"*)

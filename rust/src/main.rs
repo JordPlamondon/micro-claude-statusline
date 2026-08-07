@@ -773,6 +773,7 @@ claude-statusline
   --preview --compact same, in the one-row compact layout
   --init [--force]    write a commented ~/.claude/statusline.json
   --themes            list theme names
+  --version           which build this is
   --help              this
 ";
 
@@ -838,6 +839,10 @@ fn main() {
 
     if flag("--help") || flag("-h") {
         print!("{HELP}");
+        return;
+    }
+    if flag("--version") || flag("-V") {
+        println!("claude-statusline {}", env!("CARGO_PKG_VERSION"));
         return;
     }
     if flag("--themes") {

@@ -25,6 +25,16 @@ for target in "$ARM" "$INTEL"; do
   }
 done
 
+# The tag and the crate version have to agree, or --version reports one number
+# while the release it came from claims another. Cargo.toml sat at 1.0.0 for the
+# first ten releases because nothing was looking.
+CRATE_VERSION=$(grep '^version = ' "$ROOT/rust/Cargo.toml" | head -1 | cut -d'"' -f2)
+[ "${VERSION#v}" = "$CRATE_VERSION" ] || {
+  echo "Releasing $VERSION but rust/Cargo.toml says $CRATE_VERSION." >&2
+  echo "Set version = \"${VERSION#v}\" there, commit it, then re-run." >&2
+  exit 1
+}
+
 # Reproducible, so anyone can rebuild these assets and get the same bytes.
 CRATE_DIR="$ROOT/rust"
 . "$ROOT/scripts/rustflags.sh"

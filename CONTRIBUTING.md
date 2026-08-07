@@ -13,6 +13,11 @@ Builds both Apple targets as separate binaries, writes checksums, smoke tests
 the native one and uploads all three. Needs `rustup target add
 x86_64-apple-darwin` once.
 
+Bump `version` in `rust/Cargo.toml` to match the tag first. The script refuses
+otherwise, because `--version` reads that field and would otherwise report a
+different number from the release it came out of. It sat at 1.0.0 through the
+first ten releases, which is what happens when nothing checks.
+
 Both this and `install.sh rust` source `scripts/rustflags.sh`, which is what
 makes the output reproducible: build the same source anywhere and you get the
 same bytes, so a release can be checked against the source it claims to come
@@ -68,6 +73,25 @@ floating point and loses the tie-break.
 The expectations were originally recorded from a separate Python implementation
 that has since been removed, so they pin reviewed behaviour rather than
 whatever the current code happens to do.
+
+## After changing the installer
+
+```sh
+sh scripts/test-install.sh
+```
+
+22 checks against a scratch HOME: install, re-install, uninstall, and the cases
+where uninstall has to refuse. It builds from source, so it needs cargo but no
+network and no release. It never touches your real `~/.claude`.
+
+Worth having because the risk here is inverted. A renderer bug is an ugly bar,
+and the renderer has 432 golden cases. An installer bug edits `settings.json`
+and stops halfway, and until now the installer had nothing.
+
+The cases that matter most are the refusals: a `statusLine` pointing at some
+other tool must survive, a real file where our symlink would go must not be
+deleted, and malformed JSON must abort before anything is removed rather than
+leaving a binary behind that settings.json no longer points at.
 
 ## Checking the speed claim
 
