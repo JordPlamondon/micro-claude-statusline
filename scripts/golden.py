@@ -132,7 +132,17 @@ def fuzz(binary, home):
     cmd = binary if isinstance(binary, list) else [binary]
 
     for n, data in enumerate(inputs, 1):
-        done = subprocess.run(cmd, input=data, capture_output=True, env=env)
+        # Catches a scanner that stops advancing, which would otherwise hang
+        # this suite rather than fail it.
+        try:
+            done = subprocess.run(
+                cmd, input=data, capture_output=True, env=env, timeout=10
+            )
+        except subprocess.TimeoutExpired:
+            sys.exit(
+                f"fuzz: input {n} of {len(inputs)} never terminated\n"
+                f"  input: {data[:200]!r}"
+            )
         if done.returncode != 0 or b"panicked" in done.stderr:
             sys.exit(
                 f"fuzz: input {n} of {len(inputs)} brought it down\n"
@@ -202,9 +212,14 @@ def run(binary, stdin, env, home, args=()):
     full["COLUMNS"] = "999"
     full.update(env)
     cmd = (binary if isinstance(binary, list) else [binary]) + list(args)
-    return subprocess.run(
-        cmd, input=stdin.encode(), capture_output=True, env=full
-    ).stdout
+    # These cases run before the fuzzer, so without a timeout here a hang stalls
+    # the suite long before anything gets a chance to report it.
+    try:
+        return subprocess.run(
+            cmd, input=stdin.encode(), capture_output=True, env=full, timeout=10
+        ).stdout
+    except subprocess.TimeoutExpired:
+        sys.exit(f"a case never terminated: {' '.join(cmd)} with {stdin[:120]!r}")
 
 
 def collect(binary, workdir):
