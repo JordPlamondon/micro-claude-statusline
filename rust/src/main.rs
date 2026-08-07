@@ -323,6 +323,11 @@ const MAX_PAYLOAD: u64 = 4 * 1024 * 1024;
 /// from an env var. Fails closed and prints nothing, the same as every other
 /// malformed input.
 pub fn read_capped(path: &Path, limit: u64) -> Option<String> {
+    // Regular files only. Opening a FIFO blocks until someone writes, and an
+    // archive can carry a .git/HEAD that is one. stat does not block.
+    if !std::fs::metadata(path).ok()?.is_file() {
+        return None;
+    }
     let file = std::fs::File::open(path).ok()?;
     let mut buf = String::new();
     // limit + 1, so a file exactly at the limit is still readable and one byte

@@ -143,6 +143,35 @@ def fuzz(binary, home):
     print(f"fuzz: {len(inputs)}/{len(inputs)} malformed inputs survived")
 
 
+def check_odd_paths(binary, workdir):
+    """A read path that is not a regular file must not hang the program.
+
+    Opening a FIFO blocks until someone writes to it, so a .git/HEAD out of a
+    hostile archive would block every render for the life of the session.
+    """
+    home = os.path.join(workdir, "oddpaths")
+    dotgit = os.path.join(home, "repo", ".git")
+    os.makedirs(os.path.join(home, ".claude"), exist_ok=True)
+    os.makedirs(dotgit, exist_ok=True)
+    os.mkfifo(os.path.join(home, ".claude", "statusline.json"))
+    os.mkfifo(os.path.join(dotgit, "HEAD"))
+
+    env = dict(os.environ)
+    env["HOME"] = home
+    env["COLUMNS"] = "999"
+    env["STATUSLINE_TEST_PINNED_CLOCK"] = str(FIXED_NOW)
+    env.pop("HERDR_WORKSPACE_ID", None)
+    payload = json.dumps(
+        dict(CONFIG_PAYLOAD, workspace={"current_dir": os.path.join(home, "repo")})
+    )
+    cmd = binary if isinstance(binary, list) else [binary]
+    try:
+        subprocess.run(cmd, input=payload.encode(), capture_output=True, env=env, timeout=10)
+    except subprocess.TimeoutExpired:
+        sys.exit("odd paths: a FIFO on a read path hung the program")
+    print("odd paths: FIFOs on the config and git paths did not hang")
+
+
 def find_binary():
     # $STATUSLINE_BIN points the test at something else. Used once, to record
     # the first golden file from the reviewed Python implementation before it
@@ -254,6 +283,7 @@ def main():
         # Inside the scratch HOME, so a config on this machine cannot change
         # what the parser is handed.
         fuzz(binary, os.path.join(workdir, "plain"))
+        check_odd_paths(binary, workdir)
 
     text = serialise(results)
 
