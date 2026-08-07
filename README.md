@@ -42,7 +42,9 @@ and permissions alone. The binary is copied to `~/.claude/bin/statusline`, so
 **you can delete this checkout straight after**, and symlinked into
 `~/.local/bin` when that is on your PATH.
 
-To update, clone again and re-run `./install.sh`.
+To update, clone again and re-run `./install.sh`. `statusline --version` says
+which build you have, which is also the thing to quote if you report something
+odd.
 
 `./install.sh --uninstall` reverses all of it: the binary, the symlink and the
 `statusLine` block. Your `statusline.json` is left alone in case you come back,
@@ -84,8 +86,8 @@ docs extended with a token count, so both show comparable information:
 
 | | CPU per render |
 |---|---|
-| docs example (bash + 4 jq) | ~110 ms |
-| this | **~2.5 ms** |
+| docs example (bash + 4 jq) | ~100 ms |
+| this | **~2.2 ms** |
 
 Each `jq` in a shell status line is another process, so its cost grows as you
 add fields. This parses the payload once.
@@ -96,12 +98,13 @@ than wall clock because a chain of short-lived processes spends much of its
 wall time descheduled rather than computing.
 
 Invisible at one session. It compounds when several are working at once, since
-the status line re-runs on every event:
+the status line re-runs on every event. Taking the 300 ms debounce as the
+ceiling, so about three renders a second per session, and a whole core as 100%:
 
 | sessions at once | docs example | this |
 |---|---|---|
-| 1 | 43% of a CPU core | 1% |
-| 10 | 430% | 10% |
+| 1 | 34% of a CPU core | 0.7% |
+| 10 | 340% | 7% |
 
 If you only want a status line and none of this matters, the docs example is
 eleven lines of bash and will serve you fine.
@@ -111,6 +114,8 @@ eleven lines of bash and will serve you fine.
 - stdin, the payload Claude Code provides
 - `~/.claude/statusline.json`, if you make one
 - `<repo>/.git/HEAD`, for the branch, without forking `git`
+- `<repo>/.git` itself when it is a file rather than a directory, which is how
+  a linked worktree points at its real git directory
 - `~/.config/herdr/session.json`, only when `$HERDR_WORKSPACE_ID` is set
 
 Writes to stdout and nothing else. The whole surface, and how to check each row
