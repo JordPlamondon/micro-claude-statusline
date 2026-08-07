@@ -547,12 +547,19 @@ fn seg_modes(ctx: &Ctx, data: &Value) -> Option<String> {
     (!modes.is_empty()).then(|| modes.join(" "))
 }
 
+/// A percentage fit to print. Infinity and NaN are not percentages, and the
+/// ceiling is generous because a switch to a smaller model legitimately exceeds
+/// 100. Unbounded, 1e999 rendered as 9223372036854775807%.
+fn percentage(v: f64) -> Option<i64> {
+    v.is_finite().then(|| v.trunc().clamp(0.0, 999.0) as i64)
+}
+
 fn seg_context(ctx: &Ctx, data: &Value) -> Option<String> {
     let cfg = ctx.cfg;
     let pct = data
         .path("context_window.used_percentage")
-        .and_then(Value::as_f64)?
-        .trunc() as i64;
+        .and_then(Value::as_f64)
+        .and_then(percentage)?;
     let tip = ctx.fg(ctx.gradient_at(pct as f64 / 100.0));
     let mut out = format!("{} {}{}%{}", ctx.meter(pct, cfg.bar_width), tip, pct, RESET);
     // used_percentage counts input tokens only (input + cache create + cache
@@ -581,8 +588,8 @@ fn limit_window(ctx: &Ctx, data: &Value, key: &str, label: &str) -> Option<Strin
     let window = data.path("rate_limits")?.get(key)?;
     let pct = window
         .get("used_percentage")
-        .and_then(Value::as_f64)?
-        .trunc() as i64;
+        .and_then(Value::as_f64)
+        .and_then(percentage)?;
     let tip = ctx.fg(ctx.gradient_at(pct as f64 / 100.0));
     let mut out = format!(
         "{} {} {}{}%{}",
