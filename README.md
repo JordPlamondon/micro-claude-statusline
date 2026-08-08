@@ -2,14 +2,23 @@
 
 A tiny status line for [Claude Code](https://code.claude.com/docs/en/statusline).
 
+**393 KB · ~2 ms per render · 0 dependencies · 0 network calls · 0 credentials**
+
 ![The status line in the Nord theme](docs/nord.jpg)
 
 Row one shows identity: session, model, directory, branch, open PR with review state, and effort.
+
 Row two shows usage: context window, your 5h and 7d rate limits with reset countdowns, and session cost.
 
 A segment with no data does not show. On a narrow terminal, rows drop segments instead of wrapping. Meters are accurate to one eighth of a column.
 
-**One 393 KB binary. No Node, no npm, no toolchain. Zero dependencies, no network calls, no credentials. It reads stdin and prints a line.**
+It reads the payload Claude Code already provides, prints the bar, and exits:
+
+```
+Claude Code → stdin → statusline → stdout
+```
+
+No Node, no npm, no toolchain needed to install.
 
 <details>
 <summary>The same bar as text</summary>
