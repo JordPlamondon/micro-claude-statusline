@@ -60,7 +60,7 @@ Equal hashes show the released binary came from this source. A checksum alone sh
 
 ## Speed
 
-CPU for one render, against the eleven-line bash example in the Claude Code docs, extended with a token count so both show the same information:
+CPU for one render, against the eleven-line bash example in the [Claude Code docs](https://code.claude.com/docs/en/statusline), extended with a token count so both show the same information:
 
 | | CPU per render |
 |---|---|
