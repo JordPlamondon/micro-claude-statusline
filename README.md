@@ -1,4 +1,4 @@
-# Micro Claude Statusline
+![Micro Claude Statusline](docs/logotype.png)
 
 A tiny status line for [Claude Code](https://code.claude.com/docs/en/statusline).
 
