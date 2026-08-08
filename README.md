@@ -9,7 +9,7 @@ Row two shows usage: context window, your 5h and 7d rate limits with reset count
 
 A segment with no data does not show. On a narrow terminal, rows drop segments instead of wrapping. Meters are accurate to one eighth of a column.
 
-**One 393 KB binary. Zero dependencies, no network calls, no credentials. It reads stdin and prints a line.**
+**One 393 KB binary. No Node, no npm, no toolchain. Zero dependencies, no network calls, no credentials. It reads stdin and prints a line.**
 
 <details>
 <summary>The same bar as text</summary>
@@ -84,6 +84,8 @@ It writes to stdout and nothing else. Each claim, and how to check it:
 | Files opened | 4 | listed above, each with a size cap |
 | Lines of Rust | ~1,900 | small enough to read in full |
 | Binary | 393 KB | reproducible, see above |
+
+Some status line tools read your OAuth token from the keychain and call the usage API. This one does not need a token or a network: the rate limits arrive in the payload Claude Code already provides.
 
 All input is treated as hostile. Control characters are stripped from rendered text. Every read has a size cap. The parser is tested against 1,500 malformed payloads on every test run.
 
