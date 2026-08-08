@@ -788,7 +788,7 @@ fn render(cfg: &Config, data: &Value) -> Option<String> {
 }
 
 const HELP: &str = "\
-claude-statusline
+micro-claude-statusline
 
   (no arguments)      read the Claude Code payload on stdin, print the bar
   --preview [THEME]   render a sample bar, all themes if none is named
@@ -867,7 +867,7 @@ fn main() {
         return;
     }
     if flag("--version") || flag("-V") {
-        println!("claude-statusline {}", env!("CARGO_PKG_VERSION"));
+        println!("micro-claude-statusline {}", env!("CARGO_PKG_VERSION"));
         return;
     }
     if flag("--themes") {

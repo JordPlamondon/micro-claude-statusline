@@ -33,7 +33,7 @@ want:
 { "preset": "compact" }
 ```
 
-![The compact layout, one row](docs/compact.png)
+![The compact layout, one row](docs/compact.jpg)
 
 It sets `line1` to session, location, context, limits and cost, empties `line2`,
 narrows the meters, and removes the gap and the bottom spacing. Model is dropped

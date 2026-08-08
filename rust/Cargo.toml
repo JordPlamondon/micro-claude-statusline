@@ -4,7 +4,7 @@ version = "1.10.0"
 edition = "2021"
 license = "MIT"
 description = "Configurable status line for Claude Code"
-repository = "https://github.com/JordPlamondon/claude-statusline"
+repository = "https://github.com/JordPlamondon/micro-claude-statusline"
 readme = "../README.md"
 
 [[bin]]

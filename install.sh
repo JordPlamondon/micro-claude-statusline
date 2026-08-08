@@ -15,7 +15,7 @@
 
 set -eu
 
-REPO="JordPlamondon/claude-statusline"
+REPO="JordPlamondon/micro-claude-statusline"
 ROOT=$(cd "$(dirname "$0")" && pwd)
 SETTINGS="${HOME}/.claude/settings.json"
 choice="${1:-auto}"
