@@ -13,10 +13,7 @@ Row two shows usage: context window, your 5h and 7d rate limits with reset count
 A segment with no data does not show. On a narrow terminal, rows drop segments instead of wrapping. Meters are accurate to one eighth of a column.
 
 It reads the payload Claude Code already provides, prints the bar, and exits:
-
-```
-Claude Code → stdin → statusline → stdout
-```
+`Claude Code → stdin → statusline → stdout`
 
 No Node, no npm, no toolchain needed to install.
 
