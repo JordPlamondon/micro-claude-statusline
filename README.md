@@ -105,7 +105,7 @@ statusline --init       # writes the defaults, with a comment for every key
 
 The three most common changes:
 
-```json
+```jsonc
 { "theme": "gruvbox" }        // six themes, --themes lists them
 { "preset": "compact" }       // everything on one row
 { "line2": ["context"] }      // drop the rate limits and cost
