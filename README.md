@@ -1,6 +1,6 @@
 ![Micro Claude Statusline](docs/logotype.png)
 
-A tiny status line for [Claude Code](https://code.claude.com/docs/en/statusline).
+A tiny status line for Claude Code.
 
 **393 KB · ~2 ms per render · 0 dependencies · 0 network calls · 0 credentials**
 
