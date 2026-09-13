@@ -29,7 +29,9 @@ use theme::Rgb;
 
 const RESET: &str = "\x1b[0m";
 const EIGHTHS: [&str; 9] = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"];
-const TRACK: &str = "░";
+/// SGR layers for colour_code.
+const FG: u8 = 38;
+const BG: u8 = 48;
 // U+2800 renders blank but is not whitespace, so it survives trimming.
 const BLANK_ROW: &str = "⠀";
 
@@ -107,18 +109,21 @@ fn strip_controls(text: &str) -> String {
         .collect()
 }
 
-/// Foreground escape for a colour, at the depth the terminal supports.
-fn fg_code(c: Rgb, truecolor: bool) -> String {
+/// Escape for a colour on the FG or BG layer, at the depth the terminal supports.
+fn colour_code(layer: u8, c: Rgb, truecolor: bool) -> String {
     if truecolor {
-        format!("\x1b[38;2;{};{};{}m", c.0, c.1, c.2)
+        format!("\x1b[{layer};2;{};{};{}m", c.0, c.1, c.2)
     } else {
-        format!("\x1b[38;5;{}m", to_256(c))
+        format!("\x1b[{layer};5;{}m", to_256(c))
     }
 }
 
 impl<'a> Ctx<'a> {
     fn new(cfg: &'a Config, truecolor: bool) -> Self {
-        let sep = format!(" {}│{RESET} ", fg_code(cfg.palette.separator, truecolor));
+        let sep = format!(
+            " {}│{RESET} ",
+            colour_code(FG, cfg.palette.separator, truecolor)
+        );
         Ctx {
             cfg,
             truecolor,
@@ -127,7 +132,11 @@ impl<'a> Ctx<'a> {
     }
 
     fn fg(&self, c: Rgb) -> String {
-        fg_code(c, self.truecolor)
+        colour_code(FG, c, self.truecolor)
+    }
+
+    fn bg(&self, c: Rgb) -> String {
+        colour_code(BG, c, self.truecolor)
     }
 
     /// The single choke point for anything derived from outside this program.
@@ -155,6 +164,10 @@ impl<'a> Ctx<'a> {
     }
 
     /// Gradient bar accurate to an eighth of a cell.
+    ///
+    /// The track is background colour, not a glyph, so the cell holding a
+    /// partial block shares it. A shaded track glyph left the rest of that cell
+    /// bare, which showed as a gap between the fill and the track.
     fn meter(&self, pct: i64, width: usize) -> String {
         let raw = round_half_even(pct as f64 / 100.0 * width as f64 * 8.0);
         let eighths = raw.clamp(0.0, (width * 8) as f64) as usize;
@@ -166,19 +179,16 @@ impl<'a> Ctx<'a> {
             out.push_str(&self.fg(self.gradient_at((i as f64 + 0.5) / width as f64)));
             out.push('█');
         }
-        let mut filled = full;
 
-        if remainder > 0 && full < width {
-            out.push_str(&self.fg(self.gradient_at((full as f64 + 0.5) / width as f64)));
-            out.push_str(EIGHTHS[remainder]);
-            filled += 1;
-        }
-
-        if filled < width {
-            out.push_str(&self.fg(self.cfg.palette.dim));
-            for _ in 0..(width - filled) {
-                out.push_str(TRACK);
+        if full < width {
+            out.push_str(&self.bg(self.cfg.palette.dim));
+            let mut empty = width - full;
+            if remainder > 0 {
+                out.push_str(&self.fg(self.gradient_at((full as f64 + 0.5) / width as f64)));
+                out.push_str(EIGHTHS[remainder]);
+                empty -= 1;
             }
+            out.push_str(&" ".repeat(empty));
         }
 
         out.push_str(RESET);
