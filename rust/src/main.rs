@@ -532,11 +532,17 @@ fn seg_pr(ctx: &Ctx, data: &Value) -> Option<String> {
         data.path("pr.review_state").and_then(Value::as_str),
         &ctx.cfg.palette,
     );
+    // GitLab merge requests are numbered !N. Claude Code marks them kind "mr"
+    // and leaves kind out for GitHub.
+    let prefix = match data.path("pr.kind").and_then(Value::as_str) {
+        Some("mr") => "MR !",
+        _ => "PR #",
+    };
     let raw = num.as_raw().unwrap_or("");
     let text = if icon.is_empty() {
-        format!("PR #{raw}")
+        format!("{prefix}{raw}")
     } else {
-        format!("PR #{raw} {icon}")
+        format!("{prefix}{raw} {icon}")
     };
     Some(ctx.paint(&text, colour))
 }

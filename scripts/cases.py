@@ -119,6 +119,16 @@ for state in ("approved", "changes_requested", "pending", "draft", "weird", None
         payload["pr"]["review_state"] = state
     case(f"pr {state}", payload)
 
+for kind in ("mr", "weird"):
+    case(
+        f"pr kind {kind}",
+        {
+            "model": {"display_name": "M"},
+            "workspace": {"current_dir": "/tmp"},
+            "pr": {"number": 7, "review_state": "pending", "kind": kind},
+        },
+    )
+
 # --- location shapes ---------------------------------------------------------
 for path in ("/tmp", "/", "/tmp/definitely-not-here", ""):
     case(

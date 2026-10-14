@@ -60,7 +60,7 @@ order. Drop one by leaving it out, move it to the other row, or reorder freely.
 | `session` | herdr workspace label, else Claude Code's session name |
 | `model` | model display name |
 | `location` | directory, worktree, git branch |
-| `pr` | open PR number and review state |
+| `pr` | open PR (or GitLab MR) number and review state |
 | `modes` | reasoning effort, and `fast` when fast mode is on |
 | `context` | context meter, percentage, token counts |
 | `limits` | 5h and 7d rate limits together |
