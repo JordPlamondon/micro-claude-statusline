@@ -658,6 +658,30 @@ fn seg_cost(ctx: &Ctx, data: &Value) -> Option<String> {
     })
 }
 
+/// Lines Claude has added and removed this session, as `+156 -23`.
+///
+/// Counts go through fmt_tokens so a long session reads `+12k` rather than
+/// growing the row a digit at a time. Hidden until something has changed.
+fn seg_lines(ctx: &Ctx, data: &Value) -> Option<String> {
+    let count = |key: &str| {
+        data.path(key)
+            .and_then(Value::as_f64)
+            .filter(|n| n.is_finite() && *n >= 0.0)
+            .unwrap_or(0.0)
+    };
+    let added = count("cost.total_lines_added");
+    let removed = count("cost.total_lines_removed");
+    if added == 0.0 && removed == 0.0 {
+        return None;
+    }
+    let p = &ctx.cfg.palette;
+    Some(format!(
+        "{} {}",
+        ctx.paint(&format!("+{}", fmt_tokens(added)), p.good),
+        ctx.paint(&format!("-{}", fmt_tokens(removed)), p.bad)
+    ))
+}
+
 /// Every segment a config file can name, bound to what renders it.
 ///
 /// A table rather than one long match: each renderer is independently
@@ -665,7 +689,7 @@ fn seg_cost(ctx: &Ctx, data: &Value) -> Option<String> {
 /// arms, so `--init` can list them without a second copy going stale.
 type Renderer = fn(&Ctx, &Value) -> Option<String>;
 
-const SEGMENTS: [(&str, Renderer); 10] = [
+const SEGMENTS: [(&str, Renderer); 11] = [
     ("session", seg_session),
     ("model", seg_model),
     ("location", seg_location),
@@ -676,6 +700,7 @@ const SEGMENTS: [(&str, Renderer); 10] = [
     ("limit_5h", seg_limit_5h),
     ("limit_7d", seg_limit_7d),
     ("cost", seg_cost),
+    ("lines", seg_lines),
 ];
 
 pub fn segment_names() -> impl Iterator<Item = &'static str> {

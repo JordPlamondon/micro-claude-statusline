@@ -52,10 +52,11 @@ impl Default for Config {
             bottom_spacing: 1,
             truecolor: None,
             responsive: true,
-            // Cost and model go first: cost is glanceable elsewhere and the
-            // model is identical in every session. Context and location are
+            // Lines, cost and model go first: lines is off by default, cost
+            // is glanceable elsewhere and the model is identical in every
+            // session. Context and location are
             // the last things worth losing.
-            drop_order: ["cost", "modes", "model", "pr", "limits", "session"]
+            drop_order: ["lines", "cost", "modes", "model", "pr", "limits", "session"]
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),

@@ -66,6 +66,7 @@ order. Drop one by leaving it out, move it to the other row, or reorder freely.
 | `limits` | 5h and 7d rate limits together |
 | `limit_5h`, `limit_7d` | either one on its own |
 | `cost` | session cost |
+| `lines` | lines added and removed this session, as `+156 -23`. Not shown by default |
 
 **Themes**: `nord`, `catppuccin`, `tokyo-night`, `gruvbox`, `dracula`,
 `one-dark`. List them with `--themes`.
@@ -90,7 +91,7 @@ order. Drop one by leaving it out, move it to the other row, or reorder freely.
 | `accent_b` | directory, and the low end of the meter gradient |
 | `accent_c` | git branch |
 | `model` | model name |
-| `good`, `warn`, `bad` | PR states, and the upper gradient stops |
+| `good`, `warn`, `bad` | PR states, lines added and removed, and the upper gradient stops |
 | `notice` | fast mode |
 
 The meter gradient is derived from `accent_b`, `good`, `warn` and `bad`, so
@@ -102,13 +103,13 @@ changing those changes the meters too.
 segments are shed one at a time until it fits, in `drop_order`:
 
 ```json
-{ "responsive": true, "drop_order": ["cost", "modes", "model", "pr", "limits", "session"] }
+{ "responsive": true, "drop_order": ["lines", "cost", "modes", "model", "pr", "limits", "session"] }
 ```
 
-Cost goes first because it is glanceable elsewhere, then the model because it is
-identical in every session. Anything not listed is never shed, which is why
-`context` and `location` survive to the end. Set `"responsive": false` to keep
-every segment and accept the wrapping.
+Lines changed goes first, then cost because it is glanceable elsewhere, then
+the model because it is identical in every session. Anything not listed is never
+shed, which is why `context` and `location` survive to the end. Set
+`"responsive": false` to keep every segment and accept the wrapping.
 
 Width comes from `$COLUMNS`, which Claude Code sets before running the command.
 Claude Code captures stdout rather than attaching it to a terminal, so nothing

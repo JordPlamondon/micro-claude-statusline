@@ -202,6 +202,29 @@ for cost in (0, 0.001, 0.005, 1.005, 5.72, 12.5, 1234.567):
         },
     )
 
+# --- lines changed -------------------------------------------------------------
+# Off by default, so these run under LINES_CONFIG rather than the plain HOME.
+# Raw stdin rather than case(), since 1e999 has no json.dumps spelling.
+LINES_CONFIG = {"line1": ["lines"], "line2": []}
+
+
+def lines_payload(**counts):
+    return json.dumps({"cost": counts})
+
+
+LINES_CASES = [
+    ("no cost object", "{}"),
+    ("both zero", lines_payload(total_lines_added=0, total_lines_removed=0)),
+    ("typical", lines_payload(total_lines_added=156, total_lines_removed=23)),
+    ("added only", lines_payload(total_lines_added=12)),
+    ("removed only", lines_payload(total_lines_removed=40)),
+    ("thousands", lines_payload(total_lines_added=12345, total_lines_removed=1500)),
+    ("millions", lines_payload(total_lines_added=2500000, total_lines_removed=0)),
+    ("negative", lines_payload(total_lines_added=-5, total_lines_removed=3)),
+    ("not a number", lines_payload(total_lines_added="12", total_lines_removed=3)),
+    ("infinite", '{"cost":{"total_lines_added":1e999,"total_lines_removed":3}}'),
+]
+
 # --- config ------------------------------------------------------------------
 # Written to a scratch HOME by the runner, so themes and segment lists are
 # covered rather than only the defaults.
@@ -229,6 +252,7 @@ CONFIG_CASES = [
     ("gap_char is an escape", {"gap_char": "\x1b"}),
     ("colour is multi-byte", {"colors": {"dim": "\u20ac\u20ac"}}),
     ("colour is two-byte pair", {"colors": {"dim": "\u00e9\u00e9\u00e9"}}),
+    ("lines on usage row", {"line2": ["context", "limits", "cost", "lines"]}),
 ]
 
 CONFIG_PAYLOAD = {
@@ -240,7 +264,7 @@ CONFIG_PAYLOAD = {
         "total_input_tokens": 424000,
         "context_window_size": 1000000,
     },
-    "cost": {"total_cost_usd": 5.72},
+    "cost": {"total_cost_usd": 5.72, "total_lines_added": 156, "total_lines_removed": 23},
     "effort": {"level": "high"},
     "pr": {"number": 265, "review_state": "approved"},
     "rate_limits": {

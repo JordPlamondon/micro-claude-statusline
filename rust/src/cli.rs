@@ -68,7 +68,7 @@ pub const DEFAULT_CONFIG: &str = r#"{
 
   "// drop_order": "order segments are shed in when a row will not fit, first to go first",
   "// note on drop_order": "anything left out is never shed, which is why context and location survive",
-  "drop_order": ["cost", "modes", "model", "pr", "limits", "session"],
+  "drop_order": ["lines", "cost", "modes", "model", "pr", "limits", "session"],
 
   "// truecolor": "true or false to force, omit to detect from COLORTERM",
   "// note": "keys beginning with // are ignored, they are notes to yourself"

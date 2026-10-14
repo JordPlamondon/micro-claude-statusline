@@ -26,6 +26,8 @@ from cases import (  # noqa: E402
     CONFIG_CASES,
     CONFIG_PAYLOAD,
     FIXED_NOW,
+    LINES_CASES,
+    LINES_CONFIG,
     WIDE_PAYLOAD,
     WIDTH_CASES,
 )
@@ -228,6 +230,10 @@ def collect(binary, workdir):
     cfg_home = os.path.join(workdir, "configured")
     os.makedirs(os.path.join(plain_home, ".claude"), exist_ok=True)
     os.makedirs(os.path.join(cfg_home, ".claude"), exist_ok=True)
+    lines_home = os.path.join(workdir, "lines")
+    os.makedirs(os.path.join(lines_home, ".claude"), exist_ok=True)
+    with open(os.path.join(lines_home, ".claude", "statusline.json"), "w") as fh:
+        json.dump(LINES_CONFIG, fh)
 
     results = []
     for depth, colorterm in (("24bit", "truecolor"), ("256", None)):
@@ -245,6 +251,10 @@ def collect(binary, workdir):
                 json.dump(cfg, fh)
             out = run(binary, json.dumps(CONFIG_PAYLOAD), dict(env_depth), cfg_home)
             results.append((f"{depth} | config | {name}", out))
+
+        for name, stdin in LINES_CASES:
+            out = run(binary, stdin, dict(env_depth), lines_home)
+            results.append((f"{depth} | lines | {name}", out))
 
         # --init tells the user every value it writes is already the default.
         # Rendering with what it writes must therefore produce what no config
