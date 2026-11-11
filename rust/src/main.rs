@@ -358,8 +358,39 @@ pub fn read_capped(path: &Path, limit: u64) -> Option<String> {
     (buf.len() as u64 <= limit).then_some(buf)
 }
 
-/// Current branch, read straight from .git/HEAD rather than forking git.
-fn git_branch(cwd: &str) -> Option<String> {
+/// What .git/HEAD points at.
+///
+/// Kept as two cases because they mean different things. Folded into one
+/// string, a detached HEAD printed as a branch called `a1b2c3d`, in the branch
+/// colour, so nothing on the bar said you were detached.
+#[derive(Debug, PartialEq)]
+enum Head {
+    Branch(String),
+    /// Short object id.
+    Detached(String),
+}
+
+impl Head {
+    /// The branch name, for collapsing repeats against the directory and
+    /// worktree. A detached id is never a name, so it never collapses.
+    fn branch_name(&self) -> Option<&str> {
+        match self {
+            Head::Branch(name) => Some(name),
+            Head::Detached(_) => None,
+        }
+    }
+
+    fn render(&self, ctx: &Ctx) -> String {
+        let p = &ctx.cfg.palette;
+        match self {
+            Head::Branch(name) => ctx.paint(&format!("⎇ {}", name), p.accent_c),
+            Head::Detached(id) => ctx.paint(&format!("⎇ @{}", id), p.muted),
+        }
+    }
+}
+
+/// Current HEAD, read straight from .git/HEAD rather than forking git.
+fn git_head(cwd: &str) -> Option<Head> {
     if cwd.is_empty() {
         return None;
     }
@@ -400,21 +431,17 @@ fn git_branch(cwd: &str) -> Option<String> {
     let head = head.trim();
 
     const PREFIX: &str = "ref: refs/heads/";
-    let name = match head.strip_prefix(PREFIX) {
-        Some(rest) => rest.to_string(),
+    match head.strip_prefix(PREFIX) {
+        Some("") => None,
+        Some(rest) => Some(Head::Branch(rest.to_string())),
         // Detached HEAD: a short object id beats showing nothing. Only if it
         // actually looks like one, since a .git file can point anywhere and
         // this would otherwise print the first seven characters of any file
         // named HEAD that it was aimed at.
         None if head.len() >= 7 && head.chars().all(|c| c.is_ascii_hexdigit()) => {
-            head.chars().take(7).collect()
+            Some(Head::Detached(head.chars().take(7).collect()))
         }
-        None => return None,
-    };
-    if name.is_empty() {
-        None
-    } else {
-        Some(name)
+        None => None,
     }
 }
 
@@ -434,7 +461,7 @@ fn location(ctx: &Ctx, data: &Value, cwd: &str) -> String {
         .path("workspace.git_worktree")
         .and_then(Value::as_str)
         .or_else(|| data.path("worktree.name").and_then(Value::as_str));
-    let branch = git_branch(cwd);
+    let head = git_head(cwd);
 
     let mut segments: Vec<String> = Vec::new();
     if tree == Some(place) {
@@ -448,9 +475,12 @@ fn location(ctx: &Ctx, data: &Value, cwd: &str) -> String {
         }
     }
 
-    if let Some(b) = branch.as_deref() {
-        if b != place && Some(b) != tree {
-            segments.push(ctx.paint(&format!("⎇ {}", b), p.accent_c));
+    if let Some(h) = &head {
+        let repeats = h
+            .branch_name()
+            .is_some_and(|b| b == place || Some(b) == tree);
+        if !repeats {
+            segments.push(h.render(ctx));
         }
     }
 
@@ -964,5 +994,114 @@ fn main() {
 
     if let Some(bar) = render(&config::load(), &data) {
         let _ = std::io::stdout().write_all(bar.as_bytes());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// A fresh directory under the system temp dir, removed on drop.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new() -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let dir =
+                std::env::temp_dir().join(format!("statusline-test-{}-{n}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+
+        /// A repo at <scratch>/<name> whose HEAD holds `head`.
+        fn repo(&self, name: &str, head: &str) -> String {
+            let root = self.0.join(name);
+            std::fs::create_dir_all(root.join(".git")).unwrap();
+            std::fs::write(root.join(".git/HEAD"), head).unwrap();
+            root.to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    const ID: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    #[test]
+    fn attached_head_is_a_branch() {
+        let s = Scratch::new();
+        let cwd = s.repo("r", "ref: refs/heads/main\n");
+        assert_eq!(git_head(&cwd), Some(Head::Branch("main".into())));
+    }
+
+    #[test]
+    fn detached_head_is_not_a_branch() {
+        let s = Scratch::new();
+        let cwd = s.repo("r", &format!("{ID}\n"));
+        assert_eq!(git_head(&cwd), Some(Head::Detached("0123456".into())));
+    }
+
+    #[test]
+    fn head_that_is_neither_shows_nothing() {
+        let s = Scratch::new();
+        assert_eq!(git_head(&s.repo("words", "not a ref or an id\n")), None);
+        assert_eq!(git_head(&s.repo("short", "abc12\n")), None);
+        assert_eq!(git_head(&s.repo("empty", "ref: refs/heads/\n")), None);
+    }
+
+    #[test]
+    fn walks_up_from_a_subdirectory() {
+        let s = Scratch::new();
+        let root = s.repo("r", "ref: refs/heads/dev\n");
+        let sub = Path::new(&root).join("src/deep");
+        std::fs::create_dir_all(&sub).unwrap();
+        assert_eq!(
+            git_head(sub.to_str().unwrap()),
+            Some(Head::Branch("dev".into()))
+        );
+    }
+
+    #[test]
+    fn follows_a_worktree_pointer() {
+        let s = Scratch::new();
+        let main = s.repo("main", "ref: refs/heads/main\n");
+        let wt_git = Path::new(&main).join(".git/worktrees/feature");
+        std::fs::create_dir_all(&wt_git).unwrap();
+        std::fs::write(wt_git.join("HEAD"), "ref: refs/heads/feature\n").unwrap();
+        let wt = s.0.join("feature");
+        std::fs::create_dir_all(&wt).unwrap();
+        std::fs::write(wt.join(".git"), format!("gitdir: {}\n", wt_git.display())).unwrap();
+        assert_eq!(
+            git_head(wt.to_str().unwrap()),
+            Some(Head::Branch("feature".into()))
+        );
+    }
+
+    #[test]
+    fn location_marks_a_detached_head() {
+        let s = Scratch::new();
+        // Named like the short id, so a detached HEAD that still collapsed
+        // against the directory name would vanish from the row.
+        let cwd = s.repo("0123456", &format!("{ID}\n"));
+        let cfg = Config::default();
+        let ctx = Ctx::new(&cfg, true);
+        let row = location(&ctx, &Value::Obj(Default::default()), &cwd);
+        assert!(row.contains("⎇ @0123456"), "{row:?}");
+    }
+
+    #[test]
+    fn location_collapses_a_branch_named_like_the_directory() {
+        let s = Scratch::new();
+        let cwd = s.repo("main", "ref: refs/heads/main\n");
+        let cfg = Config::default();
+        let ctx = Ctx::new(&cfg, true);
+        let row = location(&ctx, &Value::Obj(Default::default()), &cwd);
+        assert!(!row.contains('⎇'), "{row:?}");
     }
 }
