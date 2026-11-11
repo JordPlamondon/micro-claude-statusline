@@ -20,7 +20,7 @@ mod config;
 mod json;
 mod theme;
 
-use config::Config;
+use config::{Config, Gap};
 use json::Value;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -843,9 +843,9 @@ fn render(cfg: &Config, data: &Value) -> Option<String> {
         return None;
     }
 
-    let gap: Vec<String> = match cfg.gap.as_str() {
-        "none" => Vec::new(),
-        "rule" => {
+    let gap: Vec<String> = match cfg.gap {
+        Gap::Off => Vec::new(),
+        Gap::Rule => {
             let span = lines.iter().map(|l| display_width(l)).max().unwrap_or(0);
             let width = (round_half_even(span as f64 * cfg.gap_scale) as usize).max(1);
             vec![format!(
@@ -855,7 +855,7 @@ fn render(cfg: &Config, data: &Value) -> Option<String> {
                 RESET
             )]
         }
-        _ => vec![BLANK_ROW.to_string()],
+        Gap::Blank => vec![BLANK_ROW.to_string()],
     };
 
     let mut rows: Vec<String> = Vec::new();

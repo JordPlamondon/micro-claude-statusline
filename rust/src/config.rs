@@ -13,8 +13,7 @@ pub struct Config {
     pub bar_width: usize,
     pub limit_bar_width: usize,
     pub session_name_width: usize,
-    /// "rule", "blank" or "none".
-    pub gap: String,
+    pub gap: Gap,
     pub gap_char: String,
     pub gap_scale: f64,
     pub bottom_spacing: usize,
@@ -29,6 +28,29 @@ pub struct Config {
     /// Internal, never read from JSON. Preview turns it off so a sample bar
     /// shows the sample's session name rather than the caller's real workspace.
     pub use_herdr: bool,
+}
+
+/// What sits between the two rows. Parsed once here, so the renderer matches
+/// every case rather than treating any unrecognised string as blank.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Gap {
+    /// A line of gap_char across the widest row. Config name "rule".
+    Rule,
+    /// An empty row. Config name "blank".
+    Blank,
+    /// Nothing; the rows touch. Config name "none".
+    Off,
+}
+
+impl Gap {
+    fn parse(name: &str) -> Option<Gap> {
+        match name.trim().to_lowercase().as_str() {
+            "rule" => Some(Gap::Rule),
+            "blank" => Some(Gap::Blank),
+            "none" => Some(Gap::Off),
+            _ => None,
+        }
+    }
 }
 
 impl Default for Config {
@@ -46,7 +68,7 @@ impl Default for Config {
             bar_width: 16,
             limit_bar_width: 6,
             session_name_width: 24,
-            gap: "rule".to_string(),
+            gap: Gap::Rule,
             gap_char: "┈".to_string(),
             gap_scale: 1.0,
             bottom_spacing: 1,
@@ -150,7 +172,7 @@ pub fn apply_preset(cfg: &mut Config, name: &str) {
         cfg.line2 = Vec::new();
         cfg.bar_width = 10;
         cfg.limit_bar_width = 4;
-        cfg.gap = "none".to_string();
+        cfg.gap = Gap::Off;
         cfg.bottom_spacing = 0;
     }
 }
@@ -200,11 +222,8 @@ pub fn load() -> Config {
     cfg.session_name_width = usize_at(&v, "session_name_width", cfg.session_name_width, 2, 500);
     cfg.bottom_spacing = usize_at(&v, "bottom_spacing", cfg.bottom_spacing, 0, 20);
 
-    if let Some(gap) = v.path("gap").and_then(Value::as_str) {
-        let gap = gap.trim().to_lowercase();
-        if ["rule", "blank", "none"].contains(&gap.as_str()) {
-            cfg.gap = gap;
-        }
+    if let Some(gap) = v.path("gap").and_then(Value::as_str).and_then(Gap::parse) {
+        cfg.gap = gap;
     }
     if let Some(ch) = v.path("gap_char").and_then(Value::as_str) {
         // One character, and not a control one. The rule is emitted without
