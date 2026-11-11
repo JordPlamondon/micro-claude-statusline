@@ -212,8 +212,7 @@ pub fn load() -> Config {
         // and it repeats to the width of the row, so a long string here
         // multiplies into megabytes of output.
         if let Some(first) = ch.chars().next() {
-            let n = first as u32;
-            if !(n < 0x20 || n == 0x7F || (0x80..=0x9F).contains(&n)) {
+            if !crate::is_control(first) {
                 cfg.gap_char = first.to_string();
             }
         }

@@ -250,6 +250,7 @@ CONFIG_CASES = [
     ("preset compact + theme", {"preset": "compact", "theme": "gruvbox"}),
     ("preset unknown", {"preset": "nope"}),
     ("gap_char is an escape", {"gap_char": "\x1b"}),
+    ("gap_char is a bidi override", {"gap_char": "‮"}),
     ("colour is multi-byte", {"colors": {"dim": "\u20ac\u20ac"}}),
     ("colour is two-byte pair", {"colors": {"dim": "\u00e9\u00e9\u00e9"}}),
     ("lines on usage row", {"line2": ["context", "limits", "cost", "lines"]}),
@@ -296,6 +297,17 @@ for name, payload in [
     ("newline in session_name", {"session_name": "one\ntwo",
                                  "model": {"display_name": "M"},
                                  "workspace": {"current_dir": "/tmp"}}),
+    # An SGR reset does not close a bidi override, so U+202E reversed every
+    # segment after it on the row. All of these must be gone from the output.
+    ("bidi override in session_name", {"session_name": "‮abc",
+                                       "model": {"display_name": "M"},
+                                       "workspace": {"current_dir": "/tmp"},
+                                       "pr": {"number": 12}}),
+    ("bidi isolates and marks in directory", {"model": {"display_name": "M"},
+                                              "workspace": {"current_dir": "/tmp/a⁦b⁩c‏d؜e‫f"}}),
+    ("joiners survive", {"session_name": "a‍b‌c",
+                         "model": {"display_name": "M"},
+                         "workspace": {"current_dir": "/tmp"}}),
 ]:
     case(name, payload)
 

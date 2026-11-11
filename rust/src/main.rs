@@ -101,12 +101,26 @@ struct Ctx<'a> {
 /// C0 (0x00-0x1F), DEL (0x7F) and C1 (0x80-0x9F) all go. Newline included:
 /// rows are joined by this program, not by their contents.
 fn strip_controls(text: &str) -> String {
-    text.chars()
-        .filter(|c| {
-            let n = *c as u32;
-            !(n < 0x20 || n == 0x7F || (0x80..=0x9F).contains(&n))
-        })
-        .collect()
+    text.chars().filter(|c| !is_control(*c)).collect()
+}
+
+/// The one test for characters that must not reach the terminal. strip_controls
+/// and the gap_char check in config.rs share it so the two cannot drift apart.
+///
+/// Unicode bidi controls are included: ALM (U+061C), LRM/RLM (U+200E-200F),
+/// the embeddings and overrides (U+202A-202E) and the isolates (U+2066-2069).
+/// An SGR reset does not close an embedding or override, so a directory named
+/// with U+202E reversed every segment after it on the row. The joiners U+200C
+/// and U+200D stay: emoji sequences and several scripts need them.
+pub fn is_control(c: char) -> bool {
+    let n = c as u32;
+    n < 0x20
+        || n == 0x7F
+        || (0x80..=0x9F).contains(&n)
+        || n == 0x061C
+        || (0x200E..=0x200F).contains(&n)
+        || (0x202A..=0x202E).contains(&n)
+        || (0x2066..=0x2069).contains(&n)
 }
 
 /// Escape for a colour on the FG or BG layer, at the depth the terminal supports.
