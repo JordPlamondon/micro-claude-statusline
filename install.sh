@@ -40,7 +40,28 @@ if [ "$choice" = "--uninstall" ]; then
   # Someone may have moved to a different status line since installing, and
   # deleting their setting would be worse than leaving ours behind.
   python3 - "$SETTINGS" "$INSTALLED" "$LINK" <<'PY'
-import json, os, sys
+import json, os, stat, sys, tempfile
+
+def write_settings(path, settings):
+    # Keep the file's mode. A plain open() made the replacement 0o666 & ~umask,
+    # so a settings.json locked to 0600 (its "env" block can hold API keys) came
+    # back world-readable. Writing to the resolved path keeps a symlinked
+    # settings.json, from a dotfiles repo say, a symlink.
+    real = os.path.realpath(path)
+    try:
+        mode = stat.S_IMODE(os.stat(real).st_mode)
+    except FileNotFoundError:
+        mode = 0o600
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(real), prefix=".settings.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(settings, fh, indent=2)
+            fh.write("\n")
+        os.chmod(tmp, mode)
+        os.replace(tmp, real)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 path, installed, link = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
@@ -62,11 +83,7 @@ if block.get("command") not in (installed, link):
     sys.exit(0)
 
 del settings["statusLine"]
-tmp = path + ".tmp"
-with open(tmp, "w") as fh:
-    json.dump(settings, fh, indent=2)
-    fh.write("\n")
-os.replace(tmp, path)
+write_settings(path, settings)
 print(f"  removed    statusLine from {path}")
 PY
 
@@ -210,7 +227,25 @@ esac
 
 # Merge rather than overwrite: this file holds hooks, model and permissions too.
 python3 - "$SETTINGS" "$COMMAND" <<'PY'
-import json, os, sys
+import json, os, stat, sys, tempfile
+
+def write_settings(path, settings):
+    # Same as the uninstall copy above: keep the mode, write through a symlink.
+    real = os.path.realpath(path)
+    try:
+        mode = stat.S_IMODE(os.stat(real).st_mode)
+    except FileNotFoundError:
+        mode = 0o600
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(real), prefix=".settings.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(settings, fh, indent=2)
+            fh.write("\n")
+        os.chmod(tmp, mode)
+        os.replace(tmp, real)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 path, command = sys.argv[1], sys.argv[2]
 try:
@@ -228,11 +263,7 @@ settings["statusLine"] = {
 }
 
 os.makedirs(os.path.dirname(path), exist_ok=True)
-tmp = path + ".tmp"
-with open(tmp, "w") as fh:
-    json.dump(settings, fh, indent=2)
-    fh.write("\n")
-os.replace(tmp, path)
+write_settings(path, settings)
 print(f"  statusLine -> {command}")
 PY
 

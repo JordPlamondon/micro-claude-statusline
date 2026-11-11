@@ -41,6 +41,8 @@ assert() { m=$1; shift; if "$@" >/dev/null 2>&1; then ok "$m"; else no "$m"; fi;
 refute() { m=$1; shift; if "$@" >/dev/null 2>&1; then no "$m"; else ok "$m"; fi; }
 
 fresh() { h="$WORK/$1"; rm -rf "$h"; mkdir -p "$h/.claude"; echo "$h"; }
+# mode <file> <octal>   permission bits must match; python3 is already required
+mode() { [ "$(python3 -c 'import os,stat,sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode))[2:])' "$1")" = "$2" ]; }
 installer() { HOME="$1" PATH="$1/.local/bin:$PATH" sh "$ROOT/install.sh" "$2"; }
 
 SETTINGS='{"model":"opus","hooks":{"PreToolUse":[]},"permissions":{"allow":["Bash(ls:*)"]}}'
@@ -48,8 +50,10 @@ SETTINGS='{"model":"opus","hooks":{"PreToolUse":[]},"permissions":{"allow":["Bas
 echo "install"
 H=$(fresh install)
 printf '%s' "$SETTINGS" > "$H/.claude/settings.json"
+chmod 600 "$H/.claude/settings.json"
 installer "$H" rust >/dev/null 2>&1
 assert "puts the binary in ~/.claude/bin"      test -x "$H/.claude/bin/statusline"
+assert "keeps a 0600 settings.json at 0600"    mode "$H/.claude/settings.json" 600
 assert "links it onto PATH"                    test -L "$H/.local/bin/statusline"
 assert "writes the statusLine block"           grep -q '"statusLine"' "$H/.claude/settings.json"
 assert "leaves hooks alone"                    grep -q '"hooks"' "$H/.claude/settings.json"
@@ -67,8 +71,23 @@ refute "removes the binary"                    test -e "$H/.claude/bin/statuslin
 refute "removes the symlink"                   test -e "$H/.local/bin/statusline"
 refute "drops the statusLine block"            grep -q '"statusLine"' "$H/.claude/settings.json"
 assert "keeps the rest of settings.json"       grep -q '"permissions"' "$H/.claude/settings.json"
+assert "still 0600 after uninstall"            mode "$H/.claude/settings.json" 600
 assert "keeps your statusline.json"            test -f "$H/.claude/statusline.json"
 assert "running it twice is not an error"      env HOME="$H" sh "$ROOT/install.sh" --uninstall
+
+echo "settings.json permissions and symlinks"
+H=$(fresh newsettings)
+installer "$H" rust >/dev/null 2>&1
+assert "a new settings.json is created 0600"   mode "$H/.claude/settings.json" 600
+
+H=$(fresh symlinked)
+mkdir -p "$H/dotfiles"
+printf '%s' "$SETTINGS" > "$H/dotfiles/settings.json"
+ln -s "$H/dotfiles/settings.json" "$H/.claude/settings.json"
+installer "$H" rust >/dev/null 2>&1
+assert "a symlinked settings.json stays a symlink" test -L "$H/.claude/settings.json"
+assert "  and the target gets the block"       grep -q '"statusLine"' "$H/dotfiles/settings.json"
+refute "  and no temp file is left behind"     sh -c "ls -A '$H/dotfiles' '$H/.claude' | grep -q '\.tmp$'"
 
 echo "uninstall refuses to overreach"
 H=$(fresh other)
