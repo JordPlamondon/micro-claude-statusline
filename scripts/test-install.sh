@@ -89,6 +89,19 @@ assert "a symlinked settings.json stays a symlink" test -L "$H/.claude/settings.
 assert "  and the target gets the block"       grep -q '"statusLine"' "$H/dotfiles/settings.json"
 refute "  and no temp file is left behind"     sh -c "ls -A '$H/dotfiles' '$H/.claude' | grep -q '\.tmp$'"
 
+echo "install refuses a bad settings.json before touching anything"
+H=$(fresh badsettings)
+printf '%s' '{"model": "opus",,,' > "$H/.claude/settings.json"
+refute "malformed settings.json is refused"    installer "$H" rust
+refute "  and no binary is installed"          test -e "$H/.claude/bin/statusline"
+refute "  and no link is made"                 test -e "$H/.local/bin/statusline"
+assert "  and the file is left as it was"      grep -q ',,,' "$H/.claude/settings.json"
+
+H=$(fresh notobject)
+printf '%s' '["not", "an", "object"]' > "$H/.claude/settings.json"
+refute "a settings.json that is not an object is refused" installer "$H" rust
+refute "  and no binary is installed"          test -e "$H/.claude/bin/statusline"
+
 echo "uninstall refuses to overreach"
 H=$(fresh other)
 printf '%s' '{"statusLine":{"type":"command","command":"/usr/local/bin/other-bar"},"model":"opus"}' \

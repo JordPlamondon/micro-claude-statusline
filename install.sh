@@ -137,6 +137,25 @@ case "$choice" in
   *) echo "usage: $0 [binary|rust|--uninstall]" >&2; exit 1 ;;
 esac
 
+# Check settings.json before downloading, building or copying anything. The
+# merge at the end used to be the first thing to read it, so a malformed file
+# was refused only after the binary had been copied and linked, leaving an
+# installed program that nothing pointed at.
+python3 - "$SETTINGS" <<'PY'
+import json, sys
+
+path = sys.argv[1]
+try:
+    with open(path) as fh:
+        settings = json.load(fh)
+except FileNotFoundError:
+    sys.exit(0)
+except ValueError:
+    sys.exit(f"{path} is not valid JSON. Fix or move it, then re-run. Nothing was installed.")
+if not isinstance(settings, dict):
+    sys.exit(f"{path} is not a JSON object. Fix or move it, then re-run. Nothing was installed.")
+PY
+
 if [ "$choice" = binary ]; then
   command -v gh >/dev/null 2>&1 || {
     echo "gh not found. Install it, or run: $0 rust" >&2
